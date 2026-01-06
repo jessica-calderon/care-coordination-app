@@ -18,12 +18,13 @@ function AppShell({ children, onNavigateHome, currentView }: AppShellProps) {
           {isLanding ? (
             // Brand mode: Not clickable, no arrow, notebook icon
             <div className="text-base text-gray-700 inline-flex items-center">
-              <FontAwesomeIcon icon={Icons.brand} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+              <FontAwesomeIcon icon={Icons.brand} className="mr-2 opacity-55" style={{ fontSize: '0.8em' }} aria-hidden="true" />
               Care notebook
             </div>
           ) : (
             // Back mode: Clickable, arrow icon, navigation affordance
             <button
+              type="button"
               onClick={onNavigateHome}
               className="text-base text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 rounded px-2 py-1 transition-all cursor-pointer inline-flex items-center hover:-translate-x-0.5"
             >

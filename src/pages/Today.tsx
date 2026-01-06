@@ -127,7 +127,8 @@ function Today() {
         </h1>
 
         <header className="mb-8 pb-6 border-b border-gray-200">
-          <h2 className="text-lg font-normal text-gray-700 mb-2">
+          <h2 className="text-lg font-normal text-gray-700 mb-2 inline-flex items-center">
+            <FontAwesomeIcon icon={Icons.notebook} className="mr-2 opacity-75" style={{ fontSize: '0.95em' }} aria-hidden="true" />
             Today — Wela
           </h2>
           <p className="text-sm text-gray-600">
@@ -147,7 +148,7 @@ function Today() {
         {/* Quick Note Section */}
         <section className="mb-10">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
-            <FontAwesomeIcon icon={Icons.note} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+            <FontAwesomeIcon icon={Icons.quickNote} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Quick note
           </h2>
           <div className="space-y-3">
@@ -159,8 +160,9 @@ function Today() {
               rows={4}
             />
             <button
+              type="button"
               onClick={handleAddNote}
-              className="w-full sm:w-auto px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+              className="w-full sm:w-auto px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 cursor-pointer"
             >
               Add note
             </button>
@@ -170,7 +172,7 @@ function Today() {
         {/* Care Notes Section */}
         <section className="mb-10">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
-            <FontAwesomeIcon icon={Icons.note} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+            <FontAwesomeIcon icon={Icons.careNotes} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Care Notes
           </h2>
           {careNotes.length === 0 ? (
@@ -266,8 +268,9 @@ function Today() {
             </p>
             {currentCaregiver === 'Lupe' && (
               <button
+                type="button"
                 onClick={handleHandoff}
-                className="mt-4 px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                className="mt-4 px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 cursor-pointer"
               >
                 <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                 Hand off care to Maria
@@ -284,7 +287,7 @@ function Today() {
           return (
             <section className="border-t border-gray-200 pt-6 mt-8" aria-label="Earlier care notes">
               <h2 className="text-xl font-normal text-gray-900 mb-4">
-                <FontAwesomeIcon icon={Icons.note} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                <FontAwesomeIcon icon={Icons.careNotes} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                 Earlier
               </h2>
               <div className="space-y-6">

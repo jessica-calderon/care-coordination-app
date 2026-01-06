@@ -7,7 +7,10 @@ import {
   faClock,
   faClipboard,
   faArrowLeft,
-  faSquare
+  faSquare,
+  faBookOpen,
+  faPenToSquare,
+  faFileLines
 } from '@fortawesome/free-solid-svg-icons';
 
 export const Icons = {
@@ -18,8 +21,10 @@ export const Icons = {
   handoff: faArrowRightArrowLeft,
   time: faClock,
   notebook: faClipboard,
-  brand: faClipboard,
+  brand: faBookOpen, // Changed from clipboard to book for header
   back: faArrowLeft,
   listItem: faSquare,
+  quickNote: faPenToSquare, // Pen icon for Quick note section
+  careNotes: faFileLines, // Document icon for Care Notes section
 };
 

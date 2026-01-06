@@ -38,8 +38,9 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
         </ul>
 
         <button 
+          type="button"
           onClick={onStartNotebook}
-          className="bg-gray-900 text-white px-6 py-3 rounded-md text-base font-medium hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 transition-colors"
+          className="bg-gray-900 text-white px-6 py-3 rounded-md text-base font-medium hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 transition-colors cursor-pointer"
           aria-label={hasNotebook ? "Continue care notebook" : "Start a care notebook"}
         >
           {hasNotebook ? 'Continue care notebook' : 'Start a care notebook'}
