@@ -8,17 +8,17 @@ interface LandingProps {
 
 function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
   return (
-    <main className="min-h-screen bg-white">
-      <section className="px-6 py-12 max-w-2xl mx-auto">
-        <h1 className="text-3xl md:text-4xl font-normal text-gray-900 mb-6 leading-tight">
+    <main className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      <section className="px-6 py-12 max-w-2xl mx-auto" aria-labelledby="landing-heading">
+        <h1 id="landing-heading" className="text-3xl md:text-4xl font-normal mb-6 leading-tight" style={{ color: 'var(--text-primary)' }}>
           Care, shared simply.
         </h1>
         
-        <p className="text-lg md:text-xl text-gray-700 mb-8 leading-relaxed">
+        <p className="text-lg md:text-xl mb-8 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           A calm place for family caregivers to keep track of daily care and hand off responsibility without stress.
         </p>
 
-        <ul className="space-y-4 mb-10 text-gray-700">
+        <ul className="space-y-4 mb-10" style={{ color: 'var(--text-secondary)' }} aria-label="Features">
           <li className="flex items-start">
             <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             <span>Keep daily notes about care, symptoms, and tasks</span>
@@ -40,7 +40,18 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
         <button 
           type="button"
           onClick={onStartNotebook}
-          className="bg-gray-900 text-white px-6 py-3 rounded-md text-base font-medium hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 transition-colors cursor-pointer"
+          className="px-6 py-3 rounded-md text-base font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer"
+          style={{ 
+            backgroundColor: 'var(--button-bg)',
+            color: 'var(--button-text)',
+            '--tw-ring-color': 'var(--button-bg)',
+          } as React.CSSProperties}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--button-bg-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--button-bg)';
+          }}
           aria-label={hasNotebook ? "Continue care notebook" : "Start a care notebook"}
         >
           {hasNotebook ? 'Continue care notebook' : 'Start a care notebook'}

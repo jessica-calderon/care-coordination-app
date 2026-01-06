@@ -10,7 +10,9 @@ import {
   faSquare,
   faBookOpen,
   faPenToSquare,
-  faFileLines
+  faFileLines,
+  faMoon,
+  faSun
 } from '@fortawesome/free-solid-svg-icons';
 
 export const Icons = {
@@ -26,5 +28,7 @@ export const Icons = {
   listItem: faSquare,
   quickNote: faPenToSquare, // Pen icon for Quick note section
   careNotes: faFileLines, // Document icon for Care Notes section
+  moon: faMoon,
+  sun: faSun,
 };
 
