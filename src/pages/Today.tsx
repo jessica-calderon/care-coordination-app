@@ -105,8 +105,11 @@ function Today() {
   };
 
   const handleHandoff = async () => {
+    // Determine target caregiver based on current caregiver
+    const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+    
     // Use adapter to perform handoff
-    await dataAdapter.handoff('Maria');
+    await dataAdapter.handoff(targetCaregiver);
     
     // Reload state from adapter
     const todayState = await dataAdapter.loadToday();
@@ -266,16 +269,20 @@ function Today() {
             <p>
               Current caregiver: <span className="font-medium text-gray-900">{currentCaregiver}</span>
             </p>
-            {currentCaregiver === 'Lupe' && (
-              <button
-                type="button"
-                onClick={handleHandoff}
-                className="mt-4 px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 cursor-pointer"
-              >
-                <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-                Hand off care to Maria
-              </button>
-            )}
+            {(() => {
+              // Determine target caregiver for handoff
+              const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+              return (
+                <button
+                  type="button"
+                  onClick={handleHandoff}
+                  className="mt-4 px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 cursor-pointer"
+                >
+                  <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                  Hand off care to {targetCaregiver}
+                </button>
+              );
+            })()}
           </div>
         </section>
 
