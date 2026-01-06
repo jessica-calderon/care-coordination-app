@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 interface AppShellProps {
   children: ReactNode
@@ -12,7 +12,7 @@ function AppShell({ children, onNavigateHome }: AppShellProps) {
         <div className="px-6 py-4 max-w-2xl mx-auto">
           <button
             onClick={onNavigateHome}
-            className="text-base text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 rounded px-2 py-1 transition-colors"
+            className="text-base text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 rounded px-2 py-1 transition-colors cursor-pointer"
           >
             Care notebook
           </button>

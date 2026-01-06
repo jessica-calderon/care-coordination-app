@@ -70,6 +70,24 @@ function Today() {
           Today
         </h1>
 
+        <header className="mb-8 pb-6 border-b border-gray-200">
+          <h2 className="text-lg font-normal text-gray-700 mb-2">
+            Today — Wela
+          </h2>
+          <p className="text-sm text-gray-600">
+            Current caregiver: <span className="font-medium text-gray-700">{currentCaregiver}</span>
+          </p>
+        </header>
+
+        {/* First-Time Context */}
+        {careNotes.length === 0 && todayData.tasks.length === 0 && (
+          <section className="mb-8">
+            <p className="text-base text-gray-700 leading-relaxed">
+              This is today's shared care notebook. Add notes as things happen, and they'll be here for everyone helping care for Wela.
+            </p>
+          </section>
+        )}
+
         {/* Quick Note Section */}
         <section className="mb-10">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
@@ -97,20 +115,31 @@ function Today() {
           <h2 className="text-xl font-normal text-gray-900 mb-4">
             Care Notes
           </h2>
-          <div className="space-y-4">
-            {careNotes.map((note, index) => (
-              <div key={index} className="border-b border-gray-200 pb-4 last:border-b-0">
-                <div className="flex items-start gap-3">
-                  <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
-                    {note.time}
-                  </time>
-                  <p className="text-base text-gray-800 leading-relaxed flex-1">
-                    {note.note}
-                  </p>
+          {careNotes.length === 0 ? (
+            <div className="py-6">
+              <p className="text-base text-gray-700 mb-2">
+                No notes yet today
+              </p>
+              <p className="text-sm text-gray-600">
+                When you add a note, it will appear here for everyone caring for Wela.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {careNotes.map((note, index) => (
+                <div key={index} className="border-b border-gray-200 pb-4 last:border-b-0">
+                  <div className="flex items-start gap-3">
+                    <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
+                      {note.time}
+                    </time>
+                    <p className="text-base text-gray-800 leading-relaxed flex-1">
+                      {note.note}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* What matters next Section */}
@@ -118,28 +147,39 @@ function Today() {
           <h2 className="text-xl font-normal text-gray-900 mb-4">
             What matters next
           </h2>
-          <ul className="space-y-3">
-            {todayData.tasks.map((task) => (
-              <li key={task.id} className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id={task.id}
-                  checked={task.completed}
-                  readOnly
-                  className="mt-1 w-5 h-5 text-gray-900 border-gray-300 rounded focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 cursor-pointer"
-                  aria-label={task.text}
-                />
-                <label
-                  htmlFor={task.id}
-                  className={`text-base leading-relaxed flex-1 cursor-pointer ${
-                    task.completed ? 'text-gray-500 line-through' : 'text-gray-800'
-                  }`}
-                >
-                  {task.text}
-                </label>
-              </li>
-            ))}
-          </ul>
+          {todayData.tasks.length === 0 ? (
+            <div className="py-2">
+              <p className="text-base text-gray-700">
+                No upcoming tasks added yet.
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                You can add reminders here when something needs follow-up.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {todayData.tasks.map((task) => (
+                <li key={task.id} className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id={task.id}
+                    checked={task.completed}
+                    readOnly
+                    className="mt-1 w-5 h-5 text-gray-900 border-gray-300 rounded focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 cursor-pointer"
+                    aria-label={task.text}
+                  />
+                  <label
+                    htmlFor={task.id}
+                    className={`text-base leading-relaxed flex-1 cursor-pointer ${
+                      task.completed ? 'text-gray-500 line-through' : 'text-gray-800'
+                    }`}
+                  >
+                    {task.text}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* Handoff Section */}
