@@ -1,8 +1,9 @@
 interface LandingProps {
   onStartNotebook: () => void
+  hasNotebook: boolean
 }
 
-function Landing({ onStartNotebook }: LandingProps) {
+function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
   return (
     <main className="min-h-screen bg-white">
       <section className="px-6 py-12 max-w-2xl mx-auto">
@@ -36,8 +37,9 @@ function Landing({ onStartNotebook }: LandingProps) {
         <button 
           onClick={onStartNotebook}
           className="bg-gray-900 text-white px-6 py-3 rounded-md text-base font-medium hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 transition-colors"
+          aria-label={hasNotebook ? "Continue care notebook" : "Start a care notebook"}
         >
-          Start a care notebook
+          {hasNotebook ? 'Continue care notebook' : 'Start a care notebook'}
         </button>
       </section>
     </main>
