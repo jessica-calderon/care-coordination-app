@@ -1,9 +1,36 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { todayData, type CareNote } from '../mock/todayData'
 
+const STORAGE_KEY_CARE_NOTES = 'care-app-care-notes'
+const STORAGE_KEY_CURRENT_CAREGIVER = 'care-app-current-caregiver'
+const STORAGE_KEY_LAST_UPDATED_BY = 'care-app-last-updated-by'
+
 function Today() {
-  const [careNotes, setCareNotes] = useState<CareNote[]>(todayData.careNotes)
+  const [careNotes, setCareNotes] = useState<CareNote[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CARE_NOTES)
+    return saved ? JSON.parse(saved) : todayData.careNotes
+  })
   const [noteText, setNoteText] = useState('')
+  const [lastUpdatedBy, setLastUpdatedBy] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_LAST_UPDATED_BY)
+    return saved || todayData.lastUpdatedBy
+  })
+  const [currentCaregiver, setCurrentCaregiver] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER)
+    return saved || todayData.currentCaregiver
+  })
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CARE_NOTES, JSON.stringify(careNotes))
+  }, [careNotes])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CURRENT_CAREGIVER, currentCaregiver)
+  }, [currentCaregiver])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_LAST_UPDATED_BY, lastUpdatedBy)
+  }, [lastUpdatedBy])
 
   const formatTime = (date: Date): string => {
     const hours = date.getHours()
@@ -23,6 +50,17 @@ function Today() {
       setCareNotes([newNote, ...careNotes])
       setNoteText('')
     }
+  }
+
+  const handleHandoff = () => {
+    const now = new Date()
+    const handoffNote: CareNote = {
+      time: formatTime(now),
+      note: 'Lupe handed off care to Maria.'
+    }
+    setCareNotes([handoffNote, ...careNotes])
+    setCurrentCaregiver('Maria')
+    setLastUpdatedBy('Lupe')
   }
 
   return (
@@ -105,17 +143,25 @@ function Today() {
         </section>
 
         {/* Handoff Section */}
-        <section className="border-t border-gray-200 pt-6">
+        <section className="border-t border-gray-200 pt-6 mt-8">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
             Handoff
           </h2>
-          <div className="space-y-2 text-base text-gray-700">
+          <div className="space-y-3 text-base text-gray-700">
             <p>
-              Last updated by: <span className="font-medium text-gray-900">{todayData.lastUpdatedBy}</span>
+              Last updated by: <span className="font-medium text-gray-900">{lastUpdatedBy}</span>
             </p>
             <p>
-              Current caregiver: <span className="font-medium text-gray-900">{todayData.currentCaregiver}</span>
+              Current caregiver: <span className="font-medium text-gray-900">{currentCaregiver}</span>
             </p>
+            {currentCaregiver === 'Lupe' && (
+              <button
+                onClick={handleHandoff}
+                className="mt-4 px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+              >
+                Hand off care to Maria
+              </button>
+            )}
           </div>
         </section>
       </div>

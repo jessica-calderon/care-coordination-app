@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="#3b82f6" stroke="#2563eb" stroke-width="2"/>
+  
+  <!-- Medical cross -->
+  <rect x="45" y="30" width="10" height="40" rx="2" fill="white"/>
+  <rect x="30" y="45" width="40" height="10" rx="2" fill="white"/>
+  
+  <!-- Small connecting dots representing coordination -->
+  <circle cx="25" cy="25" r="4" fill="#60a5fa"/>
+  <circle cx="75" cy="25" r="4" fill="#60a5fa"/>
+  <circle cx="25" cy="75" r="4" fill="#60a5fa"/>
+  <circle cx="75" cy="75" r="4" fill="#60a5fa"/>
+  
+  <!-- Connecting lines -->
+  <line x1="29" y1="25" x2="45" y2="40" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+  <line x1="71" y1="25" x2="55" y2="40" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+  <line x1="29" y1="75" x2="45" y2="60" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+  <line x1="71" y1="75" x2="55" y2="60" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+</svg>
+
