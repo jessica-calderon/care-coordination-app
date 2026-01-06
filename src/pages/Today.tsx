@@ -1,270 +1,121 @@
-import { useState, useEffect, useRef } from 'react'
-import { todayData, type CareNote } from '../mock/todayData'
-
-const STORAGE_KEY_NOTES_BY_DATE = 'care-app-notes-by-date'
-const STORAGE_KEY_LAST_DATE = 'care-app-last-date'
-const STORAGE_KEY_CURRENT_CAREGIVER = 'care-app-current-caregiver'
-const STORAGE_KEY_LAST_UPDATED_BY = 'care-app-last-updated-by'
-
-type NotesByDate = Record<string, CareNote[]>
-
-// Get today's date in YYYY-MM-DD format
-const getTodayDateKey = (): string => {
-  const today = new Date()
-  return today.toISOString().split('T')[0]
-}
-
-// Migrate old data format if it exists
-const migrateOldData = (): NotesByDate => {
-  const oldKey = 'care-app-care-notes'
-  const oldData = localStorage.getItem(oldKey)
-  if (oldData) {
-    try {
-      const oldNotes: CareNote[] = JSON.parse(oldData)
-      if (Array.isArray(oldNotes) && oldNotes.length > 0) {
-        // Move old notes to today's date and add authors if missing
-        const todayKey = getTodayDateKey()
-        const migratedNotes = oldNotes.map(note => ({
-          ...note,
-          author: note.author || 'Lupe'
-        }))
-        const migrated: NotesByDate = { [todayKey]: migratedNotes }
-        localStorage.setItem(STORAGE_KEY_NOTES_BY_DATE, JSON.stringify(migrated))
-        localStorage.removeItem(oldKey)
-        return migrated
-      }
-    } catch (e) {
-      // If parsing fails, ignore old data
-    }
-  }
-  return {}
-}
-
-// Load notes by date from localStorage
-const loadNotesByDate = (): NotesByDate => {
-  const saved = localStorage.getItem(STORAGE_KEY_NOTES_BY_DATE)
-  if (saved) {
-    try {
-      const notesByDate: NotesByDate = JSON.parse(saved)
-      // Migrate any notes without authors
-      const migrated: NotesByDate = {}
-      for (const [dateKey, notes] of Object.entries(notesByDate)) {
-        migrated[dateKey] = notes.map(note => ({
-          ...note,
-          author: note.author || 'Lupe'
-        }))
-      }
-      return migrated
-    } catch (e) {
-      return {}
-    }
-  }
-  // Try to migrate old data
-  return migrateOldData()
-}
-
-// Check if date has changed and preserve history
-const checkDateChange = (notesByDate: NotesByDate): NotesByDate => {
-  const todayKey = getTodayDateKey()
-  const lastDateKey = localStorage.getItem(STORAGE_KEY_LAST_DATE)
-  
-  // If date changed and we have notes from previous date, preserve them
-  if (lastDateKey && lastDateKey !== todayKey && notesByDate[lastDateKey]) {
-    // Notes are already preserved, just update the last date
-    localStorage.setItem(STORAGE_KEY_LAST_DATE, todayKey)
-    return notesByDate
-  }
-  
-  // First time or same date
-  if (!lastDateKey || lastDateKey !== todayKey) {
-    localStorage.setItem(STORAGE_KEY_LAST_DATE, todayKey)
-  }
-  
-  return notesByDate
-}
+import { useState, useEffect, useRef } from 'react';
+import { todayData } from '../mock/todayData';
+import type { CareNote, NotesByDate } from '../domain/types';
+import { getTodayDateKey, formatDateLabel } from '../domain/notebook';
+import { dataAdapter } from '../storage';
 
 function Today() {
-  const [notesByDate, setNotesByDate] = useState<NotesByDate>(() => {
-    const loaded = loadNotesByDate()
-    return checkDateChange(loaded)
-  })
-  
-  const todayKey = getTodayDateKey()
-  const [careNotes, setCareNotes] = useState<CareNote[]>(() => {
-    const notes = notesByDate[todayKey] || todayData.careNotes
-    // Migrate old notes without authors
-    return notes.map(note => ({
-      ...note,
-      author: note.author || 'Lupe'
-    }))
-  })
-  
-  const [noteText, setNoteText] = useState('')
-  const [lastUpdatedBy, setLastUpdatedBy] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_LAST_UPDATED_BY)
-    return saved || todayData.lastUpdatedBy
-  })
-  const [currentCaregiver, setCurrentCaregiver] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER)
-    return saved || todayData.currentCaregiver
-  })
+  const [notesByDate, setNotesByDate] = useState<NotesByDate>({});
+  const [careNotes, setCareNotes] = useState<CareNote[]>([]);
+  const [noteText, setNoteText] = useState('');
+  const [lastUpdatedBy, setLastUpdatedBy] = useState(todayData.lastUpdatedBy);
+  const [currentCaregiver, setCurrentCaregiver] = useState(todayData.currentCaregiver);
 
   // Track the last date we checked to avoid unnecessary updates
-  const lastCheckedDateRef = useRef<string>(localStorage.getItem(STORAGE_KEY_LAST_DATE) || getTodayDateKey())
-  const careNotesRef = useRef<CareNote[]>(careNotes)
+  const lastCheckedDateRef = useRef<string>(getTodayDateKey());
+  const careNotesRef = useRef<CareNote[]>(careNotes);
 
   // Keep ref in sync with state
   useEffect(() => {
-    careNotesRef.current = careNotes
-  }, [careNotes])
+    careNotesRef.current = careNotes;
+  }, [careNotes]);
 
-  // Save care notes to localStorage whenever they change
+  // Load initial state from adapter
   useEffect(() => {
-    const updated = { ...notesByDate, [todayKey]: careNotes }
-    setNotesByDate(updated)
-    localStorage.setItem(STORAGE_KEY_NOTES_BY_DATE, JSON.stringify(updated))
-  }, [careNotes, todayKey])
+    const loadState = async () => {
+      const todayState = await dataAdapter.loadToday();
+      setCareNotes(todayState.careNotes);
+      setCurrentCaregiver(todayState.currentCaregiver);
+      setLastUpdatedBy(todayState.lastUpdatedBy);
+      
+      // Load notesByDate for history
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
+      
+      // Initialize date ref
+      lastCheckedDateRef.current = getTodayDateKey();
+    };
+    loadState();
+  }, []);
 
   // Check for date change on mount and periodically
   useEffect(() => {
-    const checkDate = () => {
-      const currentTodayKey = getTodayDateKey()
-      const lastDateKey = lastCheckedDateRef.current
+    const checkDate = async () => {
+      const currentTodayKey = getTodayDateKey();
+      const lastDateKey = lastCheckedDateRef.current;
       
       if (lastDateKey && lastDateKey !== currentTodayKey) {
-        // Date changed - preserve previous day's notes as history
-        const currentNotes = careNotesRef.current
+        // Date changed - reload state from adapter
+        const todayState = await dataAdapter.loadToday();
+        setCareNotes(todayState.careNotes);
+        setCurrentCaregiver(todayState.currentCaregiver);
+        setLastUpdatedBy(todayState.lastUpdatedBy);
         
-        // Read current notesByDate from localStorage to get the latest state
-        const saved = localStorage.getItem(STORAGE_KEY_NOTES_BY_DATE)
-        const currentNotesByDate: NotesByDate = saved ? JSON.parse(saved) : {}
+        // Reload notesByDate for history
+        const allNotes = await dataAdapter.getNotesByDate();
+        setNotesByDate(allNotes);
         
-        // Update notesByDate: save current notes to previous date, load today's notes
-        const updated: NotesByDate = {}
-        for (const [dateKey, notes] of Object.entries(currentNotesByDate)) {
-          updated[dateKey] = notes.map(note => ({
-            ...note,
-            author: note.author || 'Lupe'
-          }))
-        }
-        if (currentNotes.length > 0) {
-          updated[lastDateKey] = currentNotes.map(note => ({
-            ...note,
-            author: note.author || 'Lupe'
-          }))
-        }
-        const savedTodayNotes = (updated[currentTodayKey] || []).map(note => ({
-          ...note,
-          author: note.author || 'Lupe'
-        }))
-        updated[currentTodayKey] = savedTodayNotes
-        
-        // Update both states
-        setNotesByDate(updated)
-        setCareNotes(savedTodayNotes)
-        
-        // Update localStorage and refs
-        localStorage.setItem(STORAGE_KEY_NOTES_BY_DATE, JSON.stringify(updated))
-        lastCheckedDateRef.current = currentTodayKey
-        localStorage.setItem(STORAGE_KEY_LAST_DATE, currentTodayKey)
+        lastCheckedDateRef.current = currentTodayKey;
       }
-    }
+    };
     
-    checkDate()
+    checkDate();
     // Check every minute for date changes
-    const interval = setInterval(checkDate, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_CURRENT_CAREGIVER, currentCaregiver)
-  }, [currentCaregiver])
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_LAST_UPDATED_BY, lastUpdatedBy)
-  }, [lastUpdatedBy])
-
-  const formatTime = (date: Date): string => {
-    const hours = date.getHours()
-    const minutes = date.getMinutes()
-    const ampm = hours >= 12 ? 'PM' : 'AM'
-    const displayHours = hours % 12 || 12
-    const displayMinutes = minutes.toString().padStart(2, '0')
-    return `${displayHours}:${displayMinutes} ${ampm}`
-  }
-
-  // Format date key (YYYY-MM-DD) to human-readable format
-  const formatDateLabel = (dateKey: string): string => {
-    const date = new Date(dateKey + 'T00:00:00')
-    const today = new Date()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    
-    // Reset time to compare dates only
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
-    
-    if (dateOnly.getTime() === yesterdayOnly.getTime()) {
-      return 'Yesterday'
-    }
-    
-    // Check if within last 7 days
-    const daysDiff = Math.floor((todayOnly.getTime() - dateOnly.getTime()) / (1000 * 60 * 60 * 24))
-    if (daysDiff >= 2 && daysDiff <= 7) {
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-      return dayNames[date.getDay()]
-    }
-    
-    // Fallback to formatted date
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
-  }
+    const interval = setInterval(checkDate, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Get history entries (last 3 days, excluding today)
   const getHistoryEntries = (): Array<{ dateKey: string; dateLabel: string; notes: CareNote[] }> => {
-    const todayKey = getTodayDateKey()
-    const entries: Array<{ dateKey: string; dateLabel: string; notes: CareNote[] }> = []
+    const todayKey = getTodayDateKey();
+    const entries: Array<{ dateKey: string; dateLabel: string; notes: CareNote[] }> = [];
     
     // Get all date keys except today, sorted descending
     const dateKeys = Object.keys(notesByDate)
       .filter(key => key !== todayKey && notesByDate[key] && notesByDate[key].length > 0)
       .sort((a, b) => b.localeCompare(a))
-      .slice(0, 3) // Limit to 3 most recent days
+      .slice(0, 3); // Limit to 3 most recent days
     
     for (const dateKey of dateKeys) {
       entries.push({
         dateKey,
         dateLabel: formatDateLabel(dateKey),
         notes: notesByDate[dateKey]
-      })
+      });
     }
     
-    return entries
-  }
+    return entries;
+  };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (noteText.trim()) {
-      const newNote: CareNote = {
-        time: formatTime(new Date()),
-        note: noteText.trim(),
-        author: currentCaregiver
-      }
-      setCareNotes([newNote, ...careNotes])
-      setNoteText('')
+      // Use adapter to add note
+      const newNote = await dataAdapter.addNote(noteText.trim());
+      
+      // Update UI state
+      setCareNotes([newNote, ...careNotes]);
+      setNoteText('');
+      
+      // Reload notesByDate to keep history in sync
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
     }
-  }
+  };
 
-  const handleHandoff = () => {
-    const now = new Date()
-    const handoffNote: CareNote = {
-      time: formatTime(now),
-      note: `${currentCaregiver} handed off care to Maria.`,
-      author: 'System'
-    }
-    setCareNotes([handoffNote, ...careNotes])
-    setCurrentCaregiver('Maria')
-    setLastUpdatedBy(currentCaregiver)
-  }
+  const handleHandoff = async () => {
+    // Use adapter to perform handoff
+    await dataAdapter.handoff('Maria');
+    
+    // Reload state from adapter
+    const todayState = await dataAdapter.loadToday();
+    setCareNotes(todayState.careNotes);
+    setCurrentCaregiver(todayState.currentCaregiver);
+    setLastUpdatedBy(todayState.lastUpdatedBy);
+    
+    // Reload notesByDate for history
+    const allNotes = await dataAdapter.getNotesByDate();
+    setNotesByDate(allNotes);
+  };
 
   return (
     <main className="min-h-screen bg-white">
@@ -419,8 +270,8 @@ function Today() {
 
         {/* Earlier Section */}
         {(() => {
-          const historyEntries = getHistoryEntries()
-          if (historyEntries.length === 0) return null
+          const historyEntries = getHistoryEntries();
+          if (historyEntries.length === 0) return null;
           
           return (
             <section className="border-t border-gray-200 pt-6 mt-8" aria-label="Earlier care notes">
@@ -438,7 +289,7 @@ function Today() {
                         const noteWithAuthor = {
                           ...note,
                           author: note.author || 'Lupe'
-                        }
+                        };
                         return (
                           <li key={index} className="flex items-start gap-3">
                             <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
@@ -457,19 +308,18 @@ function Today() {
                               </p>
                             </div>
                           </li>
-                        )
+                        );
                       })}
                     </ul>
                   </div>
                 ))}
               </div>
             </section>
-          )
+          );
         })()}
       </div>
     </main>
-  )
+  );
 }
 
-export default Today
-
+export default Today;
