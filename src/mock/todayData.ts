@@ -20,15 +20,15 @@ export const todayData: TodayData = {
   careNotes: [
     {
       time: "8:30 AM",
-      note: "Breakfast completed. Appetite was good today."
+      note: "Wela enjoyed breakfast this morning. Had a good appetite and seemed happy."
     },
     {
       time: "11:15 AM",
-      note: "Morning walk around the garden. Weather was pleasant."
+      note: "Took a nice walk around the garden together. The sunshine felt good on our faces."
     },
     {
       time: "2:00 PM",
-      note: "Afternoon rest. Feeling comfortable."
+      note: "Resting comfortably this afternoon. We chatted a bit and Wela seemed peaceful."
     }
   ],
   tasks: [
@@ -43,7 +43,7 @@ export const todayData: TodayData = {
       completed: false
     }
   ],
-  lastUpdatedBy: "Sarah",
-  currentCaregiver: "Sarah"
+  lastUpdatedBy: "Lupe",
+  currentCaregiver: "Lupe"
 };
 
