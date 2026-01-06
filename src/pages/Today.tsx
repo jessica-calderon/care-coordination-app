@@ -22,9 +22,13 @@ const migrateOldData = (): NotesByDate => {
     try {
       const oldNotes: CareNote[] = JSON.parse(oldData)
       if (Array.isArray(oldNotes) && oldNotes.length > 0) {
-        // Move old notes to today's date
+        // Move old notes to today's date and add authors if missing
         const todayKey = getTodayDateKey()
-        const migrated: NotesByDate = { [todayKey]: oldNotes }
+        const migratedNotes = oldNotes.map(note => ({
+          ...note,
+          author: note.author || 'Lupe'
+        }))
+        const migrated: NotesByDate = { [todayKey]: migratedNotes }
         localStorage.setItem(STORAGE_KEY_NOTES_BY_DATE, JSON.stringify(migrated))
         localStorage.removeItem(oldKey)
         return migrated
@@ -41,7 +45,16 @@ const loadNotesByDate = (): NotesByDate => {
   const saved = localStorage.getItem(STORAGE_KEY_NOTES_BY_DATE)
   if (saved) {
     try {
-      return JSON.parse(saved)
+      const notesByDate: NotesByDate = JSON.parse(saved)
+      // Migrate any notes without authors
+      const migrated: NotesByDate = {}
+      for (const [dateKey, notes] of Object.entries(notesByDate)) {
+        migrated[dateKey] = notes.map(note => ({
+          ...note,
+          author: note.author || 'Lupe'
+        }))
+      }
+      return migrated
     } catch (e) {
       return {}
     }
@@ -78,7 +91,12 @@ function Today() {
   
   const todayKey = getTodayDateKey()
   const [careNotes, setCareNotes] = useState<CareNote[]>(() => {
-    return notesByDate[todayKey] || todayData.careNotes
+    const notes = notesByDate[todayKey] || todayData.careNotes
+    // Migrate old notes without authors
+    return notes.map(note => ({
+      ...note,
+      author: note.author || 'Lupe'
+    }))
   })
   
   const [noteText, setNoteText] = useState('')
@@ -122,11 +140,23 @@ function Today() {
         const currentNotesByDate: NotesByDate = saved ? JSON.parse(saved) : {}
         
         // Update notesByDate: save current notes to previous date, load today's notes
-        const updated = { ...currentNotesByDate }
-        if (currentNotes.length > 0) {
-          updated[lastDateKey] = currentNotes
+        const updated: NotesByDate = {}
+        for (const [dateKey, notes] of Object.entries(currentNotesByDate)) {
+          updated[dateKey] = notes.map(note => ({
+            ...note,
+            author: note.author || 'Lupe'
+          }))
         }
-        const savedTodayNotes = updated[currentTodayKey] || []
+        if (currentNotes.length > 0) {
+          updated[lastDateKey] = currentNotes.map(note => ({
+            ...note,
+            author: note.author || 'Lupe'
+          }))
+        }
+        const savedTodayNotes = (updated[currentTodayKey] || []).map(note => ({
+          ...note,
+          author: note.author || 'Lupe'
+        }))
         updated[currentTodayKey] = savedTodayNotes
         
         // Update both states
@@ -216,7 +246,8 @@ function Today() {
     if (noteText.trim()) {
       const newNote: CareNote = {
         time: formatTime(new Date()),
-        note: noteText.trim()
+        note: noteText.trim(),
+        author: currentCaregiver
       }
       setCareNotes([newNote, ...careNotes])
       setNoteText('')
@@ -227,11 +258,12 @@ function Today() {
     const now = new Date()
     const handoffNote: CareNote = {
       time: formatTime(now),
-      note: 'Lupe handed off care to Maria.'
+      note: `${currentCaregiver} handed off care to Maria.`,
+      author: 'System'
     }
     setCareNotes([handoffNote, ...careNotes])
     setCurrentCaregiver('Maria')
-    setLastUpdatedBy('Lupe')
+    setLastUpdatedBy(currentCaregiver)
   }
 
   return (
@@ -298,16 +330,25 @@ function Today() {
           ) : (
             <div className="space-y-4">
               {careNotes.map((note, index) => (
-                <div key={index} className="border-b border-gray-200 pb-4 last:border-b-0">
+                <article key={index} className="border-b border-gray-200 pb-4 last:border-b-0">
                   <div className="flex items-start gap-3">
                     <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
                       {note.time}
                     </time>
-                    <p className="text-base text-gray-800 leading-relaxed flex-1">
-                      {note.note}
-                    </p>
+                    <div className="flex-1">
+                      <p className={`text-base leading-relaxed flex-1 ${
+                        note.author === 'System' 
+                          ? 'text-gray-600 italic' 
+                          : 'text-gray-800'
+                      }`}>
+                        {note.note}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1.5" aria-label={`Noted by ${note.author}`}>
+                        — {note.author}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           )}
@@ -393,16 +434,31 @@ function Today() {
                       {entry.dateLabel}
                     </h3>
                     <ul className="space-y-2">
-                      {entry.notes.map((note, index) => (
-                        <li key={index} className="flex items-start gap-3">
-                          <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
-                            {note.time}
-                          </time>
-                          <p className="text-sm text-gray-700 leading-relaxed flex-1">
-                            {note.note}
-                          </p>
-                        </li>
-                      ))}
+                      {entry.notes.map((note, index) => {
+                        const noteWithAuthor = {
+                          ...note,
+                          author: note.author || 'Lupe'
+                        }
+                        return (
+                          <li key={index} className="flex items-start gap-3">
+                            <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
+                              {noteWithAuthor.time}
+                            </time>
+                            <div className="flex-1">
+                              <p className={`text-sm leading-relaxed flex-1 ${
+                                noteWithAuthor.author === 'System' 
+                                  ? 'text-gray-500 italic' 
+                                  : 'text-gray-700'
+                              }`}>
+                                {noteWithAuthor.note}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1" aria-label={`Noted by ${noteWithAuthor.author}`}>
+                                — {noteWithAuthor.author}
+                              </p>
+                            </div>
+                          </li>
+                        )
+                      })}
                     </ul>
                   </div>
                 ))}
