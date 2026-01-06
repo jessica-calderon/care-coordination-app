@@ -1,3 +1,6 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { Icons } from '../ui/icons';
+
 interface LandingProps {
   onStartNotebook: () => void
   hasNotebook: boolean
@@ -17,19 +20,19 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
 
         <ul className="space-y-4 mb-10 text-gray-700">
           <li className="flex items-start">
-            <span className="mr-3 text-gray-500">•</span>
+            <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             <span>Keep daily notes about care, symptoms, and tasks</span>
           </li>
           <li className="flex items-start">
-            <span className="mr-3 text-gray-500">•</span>
+            <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             <span>See what matters today at a glance</span>
           </li>
           <li className="flex items-start">
-            <span className="mr-3 text-gray-500">•</span>
+            <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             <span>Share responsibility with family</span>
           </li>
           <li className="flex items-start">
-            <span className="mr-3 text-gray-500">•</span>
+            <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             <span>Reduce mental load during handoffs</span>
           </li>
         </ul>

@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { todayData } from '../mock/todayData';
 import type { CareNote, NotesByDate } from '../domain/types';
 import { getTodayDateKey, formatDateLabel } from '../domain/notebook';
 import { dataAdapter } from '../storage';
+import { Icons } from '../ui/icons';
 
 function Today() {
   const [notesByDate, setNotesByDate] = useState<NotesByDate>({});
@@ -145,6 +147,7 @@ function Today() {
         {/* Quick Note Section */}
         <section className="mb-10">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
+            <FontAwesomeIcon icon={Icons.note} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Quick note
           </h2>
           <div className="space-y-3">
@@ -167,6 +170,7 @@ function Today() {
         {/* Care Notes Section */}
         <section className="mb-10">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
+            <FontAwesomeIcon icon={Icons.note} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Care Notes
           </h2>
           {careNotes.length === 0 ? (
@@ -184,6 +188,7 @@ function Today() {
                 <article key={index} className="border-b border-gray-200 pb-4 last:border-b-0">
                   <div className="flex items-start gap-3">
                     <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
+                      <FontAwesomeIcon icon={Icons.time} className="mr-1 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                       {note.time}
                     </time>
                     <div className="flex-1">
@@ -208,6 +213,7 @@ function Today() {
         {/* What matters next Section */}
         <section className="mb-10">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
+            <FontAwesomeIcon icon={Icons.tasks} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             What matters next
           </h2>
           {todayData.tasks.length === 0 ? (
@@ -248,6 +254,7 @@ function Today() {
         {/* Handoff Section */}
         <section className="border-t border-gray-200 pt-6 mt-8">
           <h2 className="text-xl font-normal text-gray-900 mb-4">
+            <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Handoff
           </h2>
           <div className="space-y-3 text-base text-gray-700">
@@ -262,6 +269,7 @@ function Today() {
                 onClick={handleHandoff}
                 className="mt-4 px-6 py-3 text-base font-medium text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
               >
+                <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                 Hand off care to Maria
               </button>
             )}
@@ -276,6 +284,7 @@ function Today() {
           return (
             <section className="border-t border-gray-200 pt-6 mt-8" aria-label="Earlier care notes">
               <h2 className="text-xl font-normal text-gray-900 mb-4">
+                <FontAwesomeIcon icon={Icons.note} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                 Earlier
               </h2>
               <div className="space-y-6">
@@ -293,6 +302,7 @@ function Today() {
                         return (
                           <li key={index} className="flex items-start gap-3">
                             <time className="text-sm text-gray-600 font-medium whitespace-nowrap">
+                              <FontAwesomeIcon icon={Icons.time} className="mr-1 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                               {noteWithAuthor.time}
                             </time>
                             <div className="flex-1">

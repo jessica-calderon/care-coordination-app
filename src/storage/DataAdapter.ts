@@ -4,7 +4,7 @@
  * Implementations can use localStorage, API, or any other persistence mechanism.
  */
 
-import type { CareNote, Task, TodayState, NotesByDate } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate } from '../domain/types';
 
 export interface DataAdapter {
   /**

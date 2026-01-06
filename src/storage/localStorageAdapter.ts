@@ -157,7 +157,7 @@ export class LocalStorageAdapter implements DataAdapter {
    * Note: Tasks are currently mock data and not persisted, so this is a no-op
    * but included for interface completeness.
    */
-  async toggleTask(taskId: string, completed: boolean): Promise<void> {
+  async toggleTask(_taskId: string, _completed: boolean): Promise<void> {
     // Tasks are not currently persisted in localStorage
     // This is a no-op for now, but the interface is ready for future implementation
   }

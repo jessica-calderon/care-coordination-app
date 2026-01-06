@@ -48,7 +48,7 @@ function App() {
   }
 
   return (
-    <AppShell onNavigateHome={handleNavigateHome}>
+    <AppShell onNavigateHome={handleNavigateHome} currentView={currentView}>
       {currentView === 'today' ? (
         <Today />
       ) : (
