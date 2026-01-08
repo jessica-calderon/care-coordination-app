@@ -51,7 +51,7 @@ function HowItWorks() {
           
           <div className="mt-8 p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--text-secondary)' }}>Note:</strong> All data is stored locally on your device. There's no cloud sync, no accounts, and no server. This means your care notes stay private and accessible only on the device where you use the app.
+              <strong style={{ color: 'var(--text-secondary)' }}>Note:</strong> All data stays on your device only. There's no cloud sync, no accounts, and no server. This means your care notes stay private and are accessible only on the device where you use the app.
             </p>
           </div>
         </div>

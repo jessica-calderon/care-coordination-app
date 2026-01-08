@@ -44,7 +44,7 @@ function Footer({ onNavigateAbout, onNavigateHowItWorks, onNavigatePrivacy }: Fo
           {/* Center: Data clarity note */}
           <div className="flex-shrink-0 text-center sm:text-left">
             <small style={{ color: 'var(--text-muted)' }}>
-              Saved locally on this device
+              Stored only on this device
             </small>
           </div>
 

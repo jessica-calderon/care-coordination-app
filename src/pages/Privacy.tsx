@@ -12,11 +12,11 @@ function Privacy() {
           </p>
           
           <h2 className="text-xl font-normal mt-8 mb-4" style={{ color: 'var(--text-primary)' }}>
-            Local storage only
+            Stored only on your device
           </h2>
           
           <p>
-            All care notes, tasks, and care team information are stored locally on your device using your browser's localStorage. Nothing is sent to any server, cloud service, or third party.
+            All care notes, tasks, and care team information stay on your device only. Nothing is sent to any server, cloud service, or third party. (Technically, this uses your browser's local storage feature.)
           </p>
           
           <h2 className="text-xl font-normal mt-8 mb-4" style={{ color: 'var(--text-primary)' }}>
@@ -40,7 +40,7 @@ function Privacy() {
           </h2>
           
           <p>
-            Since all data is stored locally on your device, you have complete control. You can:
+            Since all data stays on your device only, you have complete control. You can:
           </p>
           
           <ul className="space-y-2 ml-4 list-disc" style={{ color: 'var(--text-secondary)' }}>
@@ -59,7 +59,7 @@ function Privacy() {
             </p>
             
             <p>
-              <strong style={{ color: 'var(--text-primary)' }}>Browser data:</strong> If you clear your browser's local storage or use private/incognito mode, your care notes will be cleared.
+              <strong style={{ color: 'var(--text-primary)' }}>Browser data:</strong> If you clear your browser's stored data or use private/incognito mode, your care notes will be cleared.
             </p>
             
             <p>
