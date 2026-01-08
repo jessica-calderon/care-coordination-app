@@ -14,7 +14,8 @@ import {
   faMoon,
   faSun,
   faChevronDown,
-  faChevronUp
+  faChevronUp,
+  faGear
 } from '@fortawesome/free-solid-svg-icons';
 
 export const Icons = {
@@ -34,5 +35,6 @@ export const Icons = {
   sun: faSun,
   chevronDown: faChevronDown,
   chevronUp: faChevronUp,
+  settings: faGear,
 };
 

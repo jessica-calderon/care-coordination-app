@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react';
 import AppShell from './app/AppShell';
 import Landing from './pages/Landing';
 import Today from './pages/Today';
+import CareTeam from './pages/CareTeam';
 import { dataAdapter } from './storage';
 
 const STORAGE_KEY_VIEW = 'care-app-view';
 
 function App() {
 
-  const [currentView, setCurrentView] = useState<'home' | 'today'>(() => {
+  const [currentView, setCurrentView] = useState<'home' | 'today' | 'careTeam'>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_VIEW);
-    return (saved === 'home' || saved === 'today') ? saved : 'home';
+    return (saved === 'home' || saved === 'today' || saved === 'careTeam') ? saved : 'home';
   });
 
   const [hasNotebook, setHasNotebook] = useState(false);
@@ -47,10 +48,25 @@ function App() {
     setCurrentView('home')
   }
 
+  const handleNavigateCareTeam = () => {
+    setCurrentView('careTeam')
+  }
+
+  const handleNavigateBack = () => {
+    setCurrentView('today')
+  }
+
   return (
-    <AppShell onNavigateHome={handleNavigateHome} currentView={currentView}>
+    <AppShell 
+      onNavigateHome={handleNavigateHome} 
+      onNavigateCareTeam={currentView === 'today' ? handleNavigateCareTeam : undefined}
+      onNavigateBack={currentView === 'careTeam' ? handleNavigateBack : undefined}
+      currentView={currentView}
+    >
       {currentView === 'today' ? (
         <Today />
+      ) : currentView === 'careTeam' ? (
+        <CareTeam />
       ) : (
         <Landing onStartNotebook={handleStartNotebook} hasNotebook={hasNotebook} />
       )}

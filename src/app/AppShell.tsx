@@ -6,12 +6,24 @@ import { useTheme } from '../hooks/useTheme'
 interface AppShellProps {
   children: ReactNode
   onNavigateHome: () => void
-  currentView: 'home' | 'today'
+  onNavigateCareTeam?: () => void
+  onNavigateBack?: () => void
+  currentView: 'home' | 'today' | 'careTeam'
 }
 
-function AppShell({ children, onNavigateHome, currentView }: AppShellProps) {
+function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack, currentView }: AppShellProps) {
   const isLanding = currentView === 'home'
+  const isToday = currentView === 'today'
+  const isCareTeam = currentView === 'careTeam'
   const { theme, toggleTheme } = useTheme()
+
+  const handleBackClick = () => {
+    if (isCareTeam && onNavigateBack) {
+      onNavigateBack()
+    } else {
+      onNavigateHome()
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -28,36 +40,57 @@ function AppShell({ children, onNavigateHome, currentView }: AppShellProps) {
               // Back mode: Clickable, arrow icon, navigation affordance
               <button
                 type="button"
-                onClick={onNavigateHome}
+                onClick={handleBackClick}
                 className="text-base hover:underline focus:outline-none focus:ring-2 rounded px-2 py-1 transition-all cursor-pointer inline-flex items-center hover:-translate-x-0.5"
                 style={{ 
                   color: 'var(--text-secondary)',
                   '--tw-ring-color': 'var(--focus-ring)',
                 } as React.CSSProperties}
-                aria-label="Navigate to home page"
+                aria-label={isCareTeam ? "Navigate back to Today" : "Navigate to home page"}
               >
                 <FontAwesomeIcon icon={Icons.back} className="mr-2 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                 <span>Care notebook</span>
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="p-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer"
-            style={{ 
-              color: 'var(--text-secondary)',
-              '--tw-ring-color': 'var(--focus-ring)',
-            } as React.CSSProperties}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-            aria-pressed={theme === 'dark'}
-          >
-            <FontAwesomeIcon 
-              icon={theme === 'light' ? Icons.moon : Icons.sun} 
-              style={{ fontSize: '1em' }} 
-              aria-hidden="true" 
-            />
-          </button>
+          <div className="flex items-center gap-2">
+            {isToday && onNavigateCareTeam && (
+              <button
+                type="button"
+                onClick={onNavigateCareTeam}
+                className="p-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer"
+                style={{ 
+                  color: 'var(--text-secondary)',
+                  '--tw-ring-color': 'var(--focus-ring)',
+                } as React.CSSProperties}
+                aria-label="Manage care team"
+                title="Care team"
+              >
+                <FontAwesomeIcon 
+                  icon={Icons.settings} 
+                  style={{ fontSize: '1em' }} 
+                  aria-hidden="true" 
+                />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer"
+              style={{ 
+                color: 'var(--text-secondary)',
+                '--tw-ring-color': 'var(--focus-ring)',
+              } as React.CSSProperties}
+              aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              aria-pressed={theme === 'dark'}
+            >
+              <FontAwesomeIcon 
+                icon={theme === 'light' ? Icons.moon : Icons.sun} 
+                style={{ fontSize: '1em' }} 
+                aria-hidden="true" 
+              />
+            </button>
+          </div>
         </nav>
       </header>
       <main role="main">{children}</main>
