@@ -15,7 +15,7 @@ import {
   faSun,
   faChevronDown,
   faChevronUp,
-  faGear
+  faUsers
 } from '@fortawesome/free-solid-svg-icons';
 
 export const Icons = {
@@ -35,6 +35,6 @@ export const Icons = {
   sun: faSun,
   chevronDown: faChevronDown,
   chevronUp: faChevronUp,
-  settings: faGear,
+  careTeam: faUsers,
 };
 

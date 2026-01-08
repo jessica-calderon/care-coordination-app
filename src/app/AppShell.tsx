@@ -58,19 +58,20 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
               <button
                 type="button"
                 onClick={onNavigateCareTeam}
-                className="p-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer"
+                className="px-3 py-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer inline-flex items-center gap-2 hover:opacity-80"
                 style={{ 
                   color: 'var(--text-secondary)',
                   '--tw-ring-color': 'var(--focus-ring)',
                 } as React.CSSProperties}
-                aria-label="Manage care team"
+                aria-label="Care team"
                 title="Care team"
               >
                 <FontAwesomeIcon 
-                  icon={Icons.settings} 
+                  icon={Icons.careTeam} 
                   style={{ fontSize: '1em' }} 
                   aria-hidden="true" 
                 />
+                <span className="text-sm hidden sm:inline">Care team</span>
               </button>
             )}
             <button
