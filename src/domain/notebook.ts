@@ -194,7 +194,7 @@ export function removeCaretaker(caretakers: string[], name: string, currentCaret
 export function createCaretakerAddedNote(name: string): CareNote {
   return {
     time: formatTime(new Date()),
-    note: `${name} was added as a caregiver.`,
+    note: `${name} was added as a caretaker.`,
     author: 'System'
   };
 }
@@ -205,7 +205,7 @@ export function createCaretakerAddedNote(name: string): CareNote {
 export function createCaretakerRemovedNote(name: string): CareNote {
   return {
     time: formatTime(new Date()),
-    note: `${name} was removed as a caregiver.`,
+    note: `${name} was removed as a caretaker.`,
     author: 'System'
   };
 }
