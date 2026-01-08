@@ -522,13 +522,12 @@ export class LocalStorageAdapter implements DataAdapter {
    */
   async setPrimaryCaretaker(name: string): Promise<void> {
     const todayKey = getTodayDateKey();
-    const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
     
     // Load current caretakers
     const currentCaretakers = loadCaretakers();
     
     // Set primary using domain function (includes guards)
-    const { caretakers: updatedCaretakers, canSetPrimary, reason } = setPrimaryCaretakerDomain(currentCaretakers, name, currentCaregiver);
+    const { caretakers: updatedCaretakers, canSetPrimary, reason } = setPrimaryCaretakerDomain(currentCaretakers, name);
     
     // Guard: check if setting primary is allowed
     if (!canSetPrimary) {

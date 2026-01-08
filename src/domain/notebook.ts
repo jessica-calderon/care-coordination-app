@@ -179,7 +179,7 @@ export function addCaretaker(caretakers: Caretaker[], name: string): Caretaker[]
  * - Primary contact must be active
  * Returns new array with updated primary status
  */
-export function setPrimaryCaretaker(caretakers: Caretaker[], name: string, currentCaregiver: string): { caretakers: Caretaker[]; canSetPrimary: boolean; reason?: string } {
+export function setPrimaryCaretaker(caretakers: Caretaker[], name: string): { caretakers: Caretaker[]; canSetPrimary: boolean; reason?: string } {
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { caretakers, canSetPrimary: false, reason: 'Invalid name' };
