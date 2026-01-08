@@ -3,23 +3,28 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { Icons } from '../ui/icons'
 import { useTheme } from '../hooks/useTheme'
 
+type ViewType = 'home' | 'today' | 'careTeam' | 'about' | 'howItWorks' | 'privacy';
+
 interface AppShellProps {
   children: ReactNode
   onNavigateHome: () => void
   onNavigateCareTeam?: () => void
   onNavigateBack?: () => void
-  currentView: 'home' | 'today' | 'careTeam'
+  currentView: ViewType
 }
 
 function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack, currentView }: AppShellProps) {
   const isLanding = currentView === 'home'
   const isToday = currentView === 'today'
   const isCareTeam = currentView === 'careTeam'
+  const isInfoPage = currentView === 'about' || currentView === 'howItWorks' || currentView === 'privacy'
   const { theme, toggleTheme } = useTheme()
 
   const handleBackClick = () => {
     if (isCareTeam && onNavigateBack) {
       onNavigateBack()
+    } else if (isInfoPage) {
+      onNavigateHome()
     } else {
       onNavigateHome()
     }
@@ -46,7 +51,7 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
                   color: 'var(--text-secondary)',
                   '--tw-ring-color': 'var(--focus-ring)',
                 } as React.CSSProperties}
-                aria-label={isCareTeam ? "Navigate back to Today" : "Navigate to home page"}
+                aria-label={isCareTeam ? "Navigate back to Today" : isInfoPage ? "Navigate to home page" : "Navigate to home page"}
               >
                 <FontAwesomeIcon icon={Icons.back} className="mr-2 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
                 <span>Care notebook</span>

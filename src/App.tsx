@@ -3,15 +3,22 @@ import AppShell from './app/AppShell';
 import Landing from './pages/Landing';
 import Today from './pages/Today';
 import CareTeam from './pages/CareTeam';
+import About from './pages/About';
+import HowItWorks from './pages/HowItWorks';
+import Privacy from './pages/Privacy';
+import Footer from './components/Footer';
 import { dataAdapter } from './storage';
 
 const STORAGE_KEY_VIEW = 'care-app-view';
 
+type ViewType = 'home' | 'today' | 'careTeam' | 'about' | 'howItWorks' | 'privacy';
+
 function App() {
 
-  const [currentView, setCurrentView] = useState<'home' | 'today' | 'careTeam'>(() => {
+  const [currentView, setCurrentView] = useState<ViewType>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_VIEW);
-    return (saved === 'home' || saved === 'today' || saved === 'careTeam') ? saved : 'home';
+    const validViews: ViewType[] = ['home', 'today', 'careTeam', 'about', 'howItWorks', 'privacy'];
+    return validViews.includes(saved as ViewType) ? (saved as ViewType) : 'home';
   });
 
   const [hasNotebook, setHasNotebook] = useState(false);
@@ -56,6 +63,20 @@ function App() {
     setCurrentView('today')
   }
 
+  const handleNavigateAbout = () => {
+    setCurrentView('about')
+  }
+
+  const handleNavigateHowItWorks = () => {
+    setCurrentView('howItWorks')
+  }
+
+  const handleNavigatePrivacy = () => {
+    setCurrentView('privacy')
+  }
+
+  const showFooter = currentView === 'home' || currentView === 'today' || currentView === 'about' || currentView === 'howItWorks' || currentView === 'privacy';
+
   return (
     <AppShell 
       onNavigateHome={handleNavigateHome} 
@@ -67,8 +88,21 @@ function App() {
         <Today />
       ) : currentView === 'careTeam' ? (
         <CareTeam />
+      ) : currentView === 'about' ? (
+        <About />
+      ) : currentView === 'howItWorks' ? (
+        <HowItWorks />
+      ) : currentView === 'privacy' ? (
+        <Privacy />
       ) : (
         <Landing onStartNotebook={handleStartNotebook} hasNotebook={hasNotebook} />
+      )}
+      {showFooter && (
+        <Footer 
+          onNavigateAbout={handleNavigateAbout}
+          onNavigateHowItWorks={handleNavigateHowItWorks}
+          onNavigatePrivacy={handleNavigatePrivacy}
+        />
       )}
     </AppShell>
   );
