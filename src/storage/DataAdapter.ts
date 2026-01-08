@@ -20,6 +20,14 @@ export interface DataAdapter {
   addNote(noteText: string): Promise<CareNote>;
 
   /**
+   * Update an existing care note
+   * @param noteIndex The index of the note in today's notes array
+   * @param newNoteText The updated text content of the note
+   * @returns The updated note
+   */
+  updateNote(noteIndex: number, newNoteText: string): Promise<CareNote>;
+
+  /**
    * Toggle task completion status
    * @param taskId The ID of the task to toggle
    * @param completed The new completion status
@@ -43,5 +51,24 @@ export interface DataAdapter {
    * @returns true if notebook has any data (notes, caregiver state, or tasks)
    */
   notebookExists(): Promise<boolean>;
+
+  /**
+   * Add a new caretaker to the notebook
+   * @param name The name of the caretaker to add
+   */
+  addCaretaker(name: string): Promise<void>;
+
+  /**
+   * Remove a caretaker from the notebook
+   * @param name The name of the caretaker to remove
+   * @throws Error if attempting to remove the current caregiver
+   */
+  removeCaretaker(name: string): Promise<void>;
+
+  /**
+   * Get the list of all caretakers
+   * @returns Array of caretaker names
+   */
+  getCaretakers(): Promise<string[]>;
 }
 

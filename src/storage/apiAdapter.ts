@@ -58,6 +58,17 @@ export class ApiAdapter implements DataAdapter {
   }
 
   /**
+   * Update an existing care note
+   */
+  async updateNote(noteIndex: number, newNoteText: string): Promise<CareNote> {
+    const response = await apiRequest<CareNote>(`/notes/${noteIndex}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ noteText: newNoteText }),
+    });
+    return response;
+  }
+
+  /**
    * Toggle task completion status
    */
   async toggleTask(taskId: string, completed: boolean): Promise<void> {
@@ -96,6 +107,32 @@ export class ApiAdapter implements DataAdapter {
       // If 404 or other error, notebook doesn't exist
       return false;
     }
+  }
+
+  /**
+   * Add a new caretaker to the notebook
+   */
+  async addCaretaker(name: string): Promise<void> {
+    await apiRequest<void>('/caretakers', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  /**
+   * Remove a caretaker from the notebook
+   */
+  async removeCaretaker(name: string): Promise<void> {
+    await apiRequest<void>(`/caretakers/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Get the list of all caretakers
+   */
+  async getCaretakers(): Promise<string[]> {
+    return apiRequest<string[]>('/caretakers');
   }
 }
 

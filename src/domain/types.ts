@@ -7,6 +7,7 @@ export interface CareNote {
   time: string;
   note: string;
   author: string;
+  editedAt?: string; // ISO timestamp when note was last edited
 }
 
 export interface Task {
@@ -20,10 +21,12 @@ export interface TodayState {
   tasks: Task[];
   lastUpdatedBy: string;
   currentCaregiver: string;
+  caretakers: string[];
 }
 
 /**
  * Notes organized by date key (YYYY-MM-DD format)
  */
 export type NotesByDate = Record<string, CareNote[]>;
+
 

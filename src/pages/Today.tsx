@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { todayData } from '../mock/todayData';
 import type { CareNote, NotesByDate } from '../domain/types';
-import { getTodayDateKey, formatDateLabel } from '../domain/notebook';
+import { getTodayDateKey, formatDateLabel, canEditNote } from '../domain/notebook';
 import { dataAdapter } from '../storage';
 import { Icons } from '../ui/icons';
 
@@ -12,6 +12,11 @@ function Today() {
   const [noteText, setNoteText] = useState('');
   const [lastUpdatedBy, setLastUpdatedBy] = useState(todayData.lastUpdatedBy);
   const [currentCaregiver, setCurrentCaregiver] = useState(todayData.currentCaregiver);
+  const [caretakers, setCaretakers] = useState<string[]>([]);
+  const [newCaretakerName, setNewCaretakerName] = useState('');
+  const [selectedHandoffTarget, setSelectedHandoffTarget] = useState<string>('');
+  const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
 
   // Track the last date we checked to avoid unnecessary updates
   const lastCheckedDateRef = useRef<string>(getTodayDateKey());
@@ -29,6 +34,14 @@ function Today() {
       setCareNotes(todayState.careNotes);
       setCurrentCaregiver(todayState.currentCaregiver);
       setLastUpdatedBy(todayState.lastUpdatedBy);
+      const loadedCaretakers = todayState.caretakers || [];
+      setCaretakers(loadedCaretakers);
+      
+      // Initialize handoff target to first available caretaker
+      const otherCaretakers = loadedCaretakers.filter(c => c !== todayState.currentCaregiver);
+      if (otherCaretakers.length > 0) {
+        setSelectedHandoffTarget(otherCaretakers[0]);
+      }
       
       // Load notesByDate for history
       const allNotes = await dataAdapter.getNotesByDate();
@@ -52,6 +65,14 @@ function Today() {
         setCareNotes(todayState.careNotes);
         setCurrentCaregiver(todayState.currentCaregiver);
         setLastUpdatedBy(todayState.lastUpdatedBy);
+        const loadedCaretakers = todayState.caretakers || [];
+        setCaretakers(loadedCaretakers);
+        
+        // Update handoff target to first available caretaker
+        const otherCaretakers = loadedCaretakers.filter(c => c !== todayState.currentCaregiver);
+        if (otherCaretakers.length > 0) {
+          setSelectedHandoffTarget(otherCaretakers[0]);
+        }
         
         // Reload notesByDate for history
         const allNotes = await dataAdapter.getNotesByDate();
@@ -105,10 +126,19 @@ function Today() {
   };
 
   const handleHandoff = async () => {
-    // Determine target caregiver based on current caregiver
-    const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+    // Use selected target caregiver, or fallback to first available
+    const otherCaretakers = caretakers.filter(c => c !== currentCaregiver);
+    let targetCaregiver: string;
     
-    // Use adapter to perform handoff
+    if (selectedHandoffTarget && otherCaretakers.includes(selectedHandoffTarget)) {
+      targetCaregiver = selectedHandoffTarget;
+    } else if (otherCaretakers.length > 0) {
+      targetCaregiver = otherCaretakers[0];
+    } else {
+      // Fallback to default behavior if no other caretakers
+      targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+    }
+    
     await dataAdapter.handoff(targetCaregiver);
     
     // Reload state from adapter
@@ -116,10 +146,105 @@ function Today() {
     setCareNotes(todayState.careNotes);
     setCurrentCaregiver(todayState.currentCaregiver);
     setLastUpdatedBy(todayState.lastUpdatedBy);
+    const updatedCaretakers = todayState.caretakers || [];
+    setCaretakers(updatedCaretakers);
+    
+    // Update handoff target to first available caretaker after handoff
+    const newOtherCaretakers = updatedCaretakers.filter(c => c !== todayState.currentCaregiver);
+    if (newOtherCaretakers.length > 0) {
+      setSelectedHandoffTarget(newOtherCaretakers[0]);
+    }
     
     // Reload notesByDate for history
     const allNotes = await dataAdapter.getNotesByDate();
     setNotesByDate(allNotes);
+  };
+
+  const handleAddCaretaker = async () => {
+    if (newCaretakerName.trim()) {
+      try {
+        await dataAdapter.addCaretaker(newCaretakerName.trim());
+        setNewCaretakerName('');
+        
+        // Reload state from adapter
+        const todayState = await dataAdapter.loadToday();
+        setCareNotes(todayState.careNotes);
+        const updatedCaretakers = todayState.caretakers || [];
+        setCaretakers(updatedCaretakers);
+        
+        // Update handoff target if needed
+        const otherCaretakers = updatedCaretakers.filter(c => c !== currentCaregiver);
+        if (otherCaretakers.length > 0 && !otherCaretakers.includes(selectedHandoffTarget)) {
+          setSelectedHandoffTarget(otherCaretakers[0]);
+        }
+        
+        // Reload notesByDate for history
+        const allNotes = await dataAdapter.getNotesByDate();
+        setNotesByDate(allNotes);
+      } catch (error) {
+        // Silently handle errors (e.g., duplicate caretaker)
+        console.error('Failed to add caretaker:', error);
+      }
+    }
+  };
+
+  const handleRemoveCaretaker = async (name: string) => {
+    try {
+      await dataAdapter.removeCaretaker(name);
+      
+        // Reload state from adapter
+        const todayState = await dataAdapter.loadToday();
+        setCareNotes(todayState.careNotes);
+        const updatedCaretakers = todayState.caretakers || [];
+        setCaretakers(updatedCaretakers);
+        
+        // Update handoff target if the removed caretaker was selected
+        if (selectedHandoffTarget === name) {
+          const otherCaretakers = updatedCaretakers.filter(c => c !== currentCaregiver);
+          if (otherCaretakers.length > 0) {
+            setSelectedHandoffTarget(otherCaretakers[0]);
+          } else {
+            setSelectedHandoffTarget('');
+          }
+        }
+        
+        // Reload notesByDate for history
+        const allNotes = await dataAdapter.getNotesByDate();
+        setNotesByDate(allNotes);
+    } catch (error) {
+      // Show error message (e.g., trying to remove current caregiver)
+      alert(error instanceof Error ? error.message : 'Cannot remove this caregiver');
+    }
+  };
+
+  const handleStartEdit = (noteIndex: number) => {
+    setEditingNoteIndex(noteIndex);
+    setEditingNoteText(careNotes[noteIndex].note);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingNoteIndex(null);
+    setEditingNoteText('');
+  };
+
+  const handleSaveEdit = async (noteIndex: number) => {
+    if (editingNoteText.trim()) {
+      // Use adapter to update note
+      const updatedNote = await dataAdapter.updateNote(noteIndex, editingNoteText.trim());
+      
+      // Update UI state
+      const updatedNotes = [...careNotes];
+      updatedNotes[noteIndex] = updatedNote;
+      setCareNotes(updatedNotes);
+      
+      // Reload notesByDate to keep history in sync
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
+      
+      // Reset editing state
+      setEditingNoteIndex(null);
+      setEditingNoteText('');
+    }
   };
 
   return (
@@ -236,6 +361,9 @@ function Today() {
                   }
                 };
                 const isoTime = parseTime(note.time);
+                const isEditing = editingNoteIndex === index;
+                const now = new Date();
+                const canEdit = canEditNote(note, currentCaregiver, now);
                 
                 return (
                   <article key={index} className="border-b pb-4 last:border-b-0" style={{ borderColor: 'var(--border-color)' }} role="listitem">
@@ -250,15 +378,91 @@ function Today() {
                         {note.time}
                       </time>
                       <div className="flex-1">
-                        <p className="text-base leading-relaxed flex-1" style={{ 
-                          color: note.author === 'System' ? 'var(--text-muted)' : 'var(--text-primary)',
-                          fontStyle: note.author === 'System' ? 'italic' : 'normal'
-                        }}>
-                          {note.note}
-                        </p>
-                        <p className="text-xs mt-1.5" style={{ color: 'var(--text-light)' }} aria-label={`Noted by ${note.author}`}>
-                          — {note.author}
-                        </p>
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingNoteText}
+                              onChange={(e) => setEditingNoteText(e.target.value)}
+                              className="w-full px-4 py-3 text-base rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent resize-y min-h-[100px] leading-relaxed"
+                              style={{ 
+                                color: 'var(--text-primary)',
+                                backgroundColor: 'var(--bg-primary)',
+                                borderColor: 'var(--border-color)',
+                                '--tw-ring-color': 'var(--focus-ring)',
+                              } as React.CSSProperties}
+                              rows={4}
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(index)}
+                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                style={{ 
+                                  color: 'var(--button-secondary-text)',
+                                  backgroundColor: 'var(--button-secondary-bg)',
+                                  '--tw-ring-color': 'var(--focus-ring)',
+                                } as React.CSSProperties}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                                }}
+                                aria-label="Save edited note"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEdit}
+                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                style={{ 
+                                  color: 'var(--text-secondary)',
+                                  backgroundColor: 'transparent',
+                                  '--tw-ring-color': 'var(--focus-ring)',
+                                } as React.CSSProperties}
+                                aria-label="Cancel editing"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-base leading-relaxed flex-1" style={{ 
+                                color: note.author === 'System' ? 'var(--text-muted)' : 'var(--text-primary)',
+                                fontStyle: note.author === 'System' ? 'italic' : 'normal'
+                              }}>
+                                {note.note}
+                              </p>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(index)}
+                                  className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer flex-shrink-0"
+                                  style={{ 
+                                    color: 'var(--text-secondary)',
+                                    backgroundColor: 'transparent',
+                                    '--tw-ring-color': 'var(--focus-ring)',
+                                  } as React.CSSProperties}
+                                  aria-label="Edit note"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-xs mt-1.5" style={{ color: 'var(--text-light)' }} aria-label={`Noted by ${note.author}`}>
+                              — {note.author}
+                              {note.editedAt && (
+                                <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label="Note was edited">
+                                  (edited)
+                                </span>
+                              )}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -317,6 +521,108 @@ function Today() {
           )}
         </section>
 
+        {/* Caretakers Section */}
+        <section className="mb-10" aria-labelledby="caretakers-heading">
+          <h2 id="caretakers-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
+            <FontAwesomeIcon icon={Icons.caregiver} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+            Caretakers
+          </h2>
+          <div className="space-y-4">
+            {/* Caretaker List */}
+            {caretakers.length === 0 ? (
+              <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                No caretakers added yet.
+              </p>
+            ) : (
+              <ul className="space-y-2" role="list" aria-label="List of caretakers">
+                {caretakers.map((caretaker) => {
+                  const isCurrent = caretaker === currentCaregiver;
+                  return (
+                    <li key={caretaker} className="flex items-center justify-between gap-3 py-2 border-b" style={{ borderColor: 'var(--border-color)' }} role="listitem">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-base" style={{ color: 'var(--text-primary)' }}>
+                          {caretaker}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-xs px-2 py-0.5 rounded" style={{ 
+                            color: 'var(--text-secondary)',
+                            backgroundColor: 'var(--bg-primary)',
+                            border: '1px solid var(--border-color)'
+                          }}>
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      {isCurrent ? (
+                        <span className="text-sm" style={{ color: 'var(--text-muted)' }} title="Cannot remove the current caregiver">
+                          Cannot remove
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCaretaker(caretaker)}
+                          className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                          style={{ 
+                            color: 'var(--text-secondary)',
+                            backgroundColor: 'transparent',
+                            '--tw-ring-color': 'var(--focus-ring)',
+                          } as React.CSSProperties}
+                          aria-label={`Remove ${caretaker} as a caregiver`}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            
+            {/* Add Caretaker Input */}
+            <form 
+              className="flex gap-2" 
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddCaretaker();
+              }}
+              aria-label="Add a new caretaker"
+            >
+              <input
+                type="text"
+                value={newCaretakerName}
+                onChange={(e) => setNewCaretakerName(e.target.value)}
+                placeholder="Add caretaker name…"
+                className="flex-1 px-4 py-2 text-base rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent"
+                style={{ 
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: 'var(--border-color)',
+                  '--tw-ring-color': 'var(--focus-ring)',
+                } as React.CSSProperties}
+                aria-label="Caretaker name"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                style={{ 
+                  color: 'var(--button-secondary-text)',
+                  backgroundColor: 'var(--button-secondary-bg)',
+                  '--tw-ring-color': 'var(--focus-ring)',
+                } as React.CSSProperties}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                }}
+                aria-label="Add caretaker"
+              >
+                Add
+              </button>
+            </form>
+          </div>
+        </section>
+
         {/* Handoff Section */}
         <section className="border-t pt-6 mt-8" style={{ borderColor: 'var(--border-color)' }} aria-labelledby="handoff-heading">
           <h2 id="handoff-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
@@ -331,29 +637,111 @@ function Today() {
               Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
             </p>
             {(() => {
-              // Determine target caregiver for handoff
-              const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+              // Get available caretakers for handoff
+              const otherCaretakers = caretakers.filter(c => c !== currentCaregiver);
+              
+              if (otherCaretakers.length === 0) {
+                // Fallback to default behavior if no other caretakers
+                const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+                return (
+                  <button
+                    type="button"
+                    onClick={handleHandoff}
+                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                    style={{ 
+                      color: 'var(--button-secondary-text)',
+                      backgroundColor: 'var(--button-secondary-bg)',
+                      '--tw-ring-color': 'var(--focus-ring)',
+                    } as React.CSSProperties}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                    }}
+                    aria-label={`Hand off care to ${targetCaregiver}`}
+                  >
+                    <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                    Hand off care to {targetCaregiver}
+                  </button>
+                );
+              }
+              
+              if (otherCaretakers.length === 1) {
+                // Single option: show button
+                const targetCaregiver = otherCaretakers[0];
+                return (
+                  <button
+                    type="button"
+                    onClick={handleHandoff}
+                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                    style={{ 
+                      color: 'var(--button-secondary-text)',
+                      backgroundColor: 'var(--button-secondary-bg)',
+                      '--tw-ring-color': 'var(--focus-ring)',
+                    } as React.CSSProperties}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                    }}
+                    aria-label={`Hand off care to ${targetCaregiver}`}
+                  >
+                    <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                    Hand off care to {targetCaregiver}
+                  </button>
+                );
+              }
+              
+              // Multiple options: show dropdown
               return (
-                <button
-                  type="button"
-                  onClick={handleHandoff}
-                  className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
-                  style={{ 
-                    color: 'var(--button-secondary-text)',
-                    backgroundColor: 'var(--button-secondary-bg)',
-                    '--tw-ring-color': 'var(--focus-ring)',
-                  } as React.CSSProperties}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
-                  }}
-                  aria-label={`Hand off care to ${targetCaregiver}`}
-                >
-                  <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-                  Hand off care to {targetCaregiver}
-                </button>
+                <div className="mt-4 space-y-3">
+                  <label htmlFor="handoff-select" className="block text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Hand off care to:
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      id="handoff-select"
+                      value={selectedHandoffTarget}
+                      onChange={(e) => setSelectedHandoffTarget(e.target.value)}
+                      className="flex-1 px-4 py-3 text-base rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent"
+                      style={{ 
+                        color: 'var(--text-primary)',
+                        backgroundColor: 'var(--bg-primary)',
+                        borderColor: 'var(--border-color)',
+                        '--tw-ring-color': 'var(--focus-ring)',
+                      } as React.CSSProperties}
+                      aria-label="Select caregiver to hand off care to"
+                    >
+                      {otherCaretakers.map((caretaker) => (
+                        <option key={caretaker} value={caretaker}>
+                          {caretaker}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleHandoff}
+                      className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                      style={{ 
+                        color: 'var(--button-secondary-text)',
+                        backgroundColor: 'var(--button-secondary-bg)',
+                        '--tw-ring-color': 'var(--focus-ring)',
+                      } as React.CSSProperties}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                      }}
+                      aria-label={`Hand off care to ${selectedHandoffTarget}`}
+                    >
+                      <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                      Hand off
+                    </button>
+                  </div>
+                </div>
               );
             })()}
           </div>
@@ -419,6 +807,11 @@ function Today() {
                               </p>
                               <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }} aria-label={`Noted by ${noteWithAuthor.author}`}>
                                 — {noteWithAuthor.author}
+                                {noteWithAuthor.editedAt && (
+                                  <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label="Note was edited">
+                                    (edited)
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </li>

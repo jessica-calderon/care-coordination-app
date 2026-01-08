@@ -16,3 +16,4 @@ export const dataAdapter =
     ? new ApiAdapter()
     : new LocalStorageAdapter();
 
+

@@ -89,3 +89,125 @@ export function createHandoffNote(fromCaregiver: string, toCaregiver: string): C
   };
 }
 
+/**
+ * Parse time string (e.g., "8:30 AM") to Date object for today
+ * Returns null if parsing fails
+ */
+function parseTimeString(timeStr: string, dateKey?: string): Date | null {
+  try {
+    const [timePart, ampm] = timeStr.split(' ');
+    const [hours, minutes] = timePart.split(':');
+    let hour24 = parseInt(hours, 10);
+    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+    
+    const baseDate = dateKey ? new Date(dateKey + 'T00:00:00') : new Date();
+    baseDate.setHours(hour24, parseInt(minutes, 10), 0, 0);
+    return baseDate;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a note can be edited by the current caregiver
+ * Returns true only if:
+ * - Note author matches current caregiver
+ * - Note is not a system note
+ * - Note was created within the last 15 minutes
+ */
+export function canEditNote(note: CareNote, currentCaregiver: string, now: Date): boolean {
+  // System notes cannot be edited
+  if (note.author === 'System') {
+    return false;
+  }
+  
+  // Only author can edit
+  if (note.author !== currentCaregiver) {
+    return false;
+  }
+  
+  // Parse the note's creation time
+  const noteDate = parseTimeString(note.time);
+  if (!noteDate) {
+    return false;
+  }
+  
+  // Check if note was created within 15 minutes
+  const diffMs = now.getTime() - noteDate.getTime();
+  const diffMinutes = diffMs / (1000 * 60);
+  
+  return diffMinutes <= 15;
+}
+
+/**
+ * Update an existing care note (pure function)
+ * Preserves original time and author, updates note text and editedAt
+ */
+export function updateCareNote(note: CareNote, newNoteText: string): CareNote {
+  return {
+    ...note,
+    note: newNoteText.trim(),
+    editedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Add a caretaker to the list (pure function)
+ * Returns a new array with the caretaker added if not already present
+ */
+export function addCaretaker(caretakers: string[], name: string): string[] {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return caretakers;
+  }
+  // Check if already exists (case-insensitive)
+  const exists = caretakers.some(c => c.toLowerCase() === trimmedName.toLowerCase());
+  if (exists) {
+    return caretakers;
+  }
+  return [...caretakers, trimmedName];
+}
+
+/**
+ * Remove a caretaker from the list (pure function)
+ * Guards against removing the current caretaker
+ * Returns the original array if guard fails, otherwise returns new array without the caretaker
+ */
+export function removeCaretaker(caretakers: string[], name: string, currentCaretaker: string): { caretakers: string[]; canRemove: boolean } {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { caretakers, canRemove: false };
+  }
+  // Guard: cannot remove current caretaker
+  if (trimmedName.toLowerCase() === currentCaretaker.toLowerCase()) {
+    return { caretakers, canRemove: false };
+  }
+  // Remove the caretaker (case-insensitive)
+  const updated = caretakers.filter(c => c.toLowerCase() !== trimmedName.toLowerCase());
+  return { caretakers: updated, canRemove: true };
+}
+
+/**
+ * Create a system note for caretaker added (pure function)
+ */
+export function createCaretakerAddedNote(name: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${name} was added as a caregiver.`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for caretaker removed (pure function)
+ */
+export function createCaretakerRemovedNote(name: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${name} was removed as a caregiver.`,
+    author: 'System'
+  };
+}
+
+

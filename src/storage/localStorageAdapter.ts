@@ -6,13 +6,14 @@
 
 import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate } from '../domain/types';
-import { getTodayDateKey, createCareNote, createHandoffNote } from '../domain/notebook';
+import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, removeCaretaker as removeCaretakerDomain, createCaretakerAddedNote, createCaretakerRemovedNote } from '../domain/notebook';
 import { todayData } from '../mock/todayData';
 
 const STORAGE_KEY_NOTES_BY_DATE = 'care-app-notes-by-date';
 const STORAGE_KEY_LAST_DATE = 'care-app-last-date';
 const STORAGE_KEY_CURRENT_CAREGIVER = 'care-app-current-caregiver';
 const STORAGE_KEY_LAST_UPDATED_BY = 'care-app-last-updated-by';
+const STORAGE_KEY_CARETAKERS = 'care-app-caretakers';
 
 /**
  * Migrate old data format if it exists
@@ -96,6 +97,45 @@ function saveNotesByDate(notesByDate: NotesByDate): void {
   localStorage.setItem(STORAGE_KEY_NOTES_BY_DATE, JSON.stringify(notesByDate));
 }
 
+/**
+ * Load caretakers from localStorage
+ * Returns default caretakers if none exist
+ */
+function loadCaretakers(): string[] {
+  const saved = localStorage.getItem(STORAGE_KEY_CARETAKERS);
+  if (saved) {
+    try {
+      const caretakers: string[] = JSON.parse(saved);
+      if (Array.isArray(caretakers)) {
+        return caretakers;
+      }
+    } catch (e) {
+      // If parsing fails, return defaults
+    }
+  }
+  // Default caretakers: initialize with current caregiver if it exists
+  const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
+  // Initialize with current caregiver and the other default (Lupe or Maria)
+  // Ensure current caregiver is always first, and include the other default if different
+  const defaultCaretakers = [currentCaregiver];
+  if (currentCaregiver === 'Lupe') {
+    defaultCaretakers.push('Maria');
+  } else if (currentCaregiver === 'Maria') {
+    defaultCaretakers.push('Lupe');
+  } else {
+    // If current caregiver is neither default, include both defaults
+    defaultCaretakers.push('Lupe', 'Maria');
+  }
+  return defaultCaretakers;
+}
+
+/**
+ * Save caretakers to localStorage
+ */
+function saveCaretakers(caretakers: string[]): void {
+  localStorage.setItem(STORAGE_KEY_CARETAKERS, JSON.stringify(caretakers));
+}
+
 export class LocalStorageAdapter implements DataAdapter {
   /**
    * Load today's complete state
@@ -117,6 +157,16 @@ export class LocalStorageAdapter implements DataAdapter {
     const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
     const lastUpdatedBy = localStorage.getItem(STORAGE_KEY_LAST_UPDATED_BY) || todayData.lastUpdatedBy;
     
+    // Load caretakers
+    let caretakers = loadCaretakers();
+    
+    // Ensure current caregiver is always in the list
+    const currentInList = caretakers.some(c => c.toLowerCase() === currentCaregiver.toLowerCase());
+    if (!currentInList) {
+      caretakers = [currentCaregiver, ...caretakers];
+      saveCaretakers(caretakers);
+    }
+    
     // Tasks are currently mock data (not persisted)
     const tasks = todayData.tasks;
     
@@ -124,7 +174,8 @@ export class LocalStorageAdapter implements DataAdapter {
       careNotes,
       tasks,
       currentCaregiver,
-      lastUpdatedBy
+      lastUpdatedBy,
+      caretakers
     };
   }
 
@@ -150,6 +201,35 @@ export class LocalStorageAdapter implements DataAdapter {
     saveNotesByDate(updatedNotesByDate);
     
     return newNote;
+  }
+
+  /**
+   * Update an existing care note
+   */
+  async updateNote(noteIndex: number, newNoteText: string): Promise<CareNote> {
+    const todayKey = getTodayDateKey();
+    
+    // Load current notes
+    const notesByDate = loadNotesByDate();
+    const todayNotes = notesByDate[todayKey] || [];
+    
+    // Validate index
+    if (noteIndex < 0 || noteIndex >= todayNotes.length) {
+      throw new Error('Invalid note index');
+    }
+    
+    // Update the note using domain function
+    const updatedNote = updateCareNote(todayNotes[noteIndex], newNoteText);
+    
+    // Create updated notes array
+    const updatedNotes = [...todayNotes];
+    updatedNotes[noteIndex] = updatedNote;
+    const updatedNotesByDate = { ...notesByDate, [todayKey]: updatedNotes };
+    
+    // Save to localStorage
+    saveNotesByDate(updatedNotesByDate);
+    
+    return updatedNote;
   }
 
   /**
@@ -238,6 +318,84 @@ export class LocalStorageAdapter implements DataAdapter {
     }
 
     return false;
+  }
+
+  /**
+   * Add a new caretaker to the notebook
+   */
+  async addCaretaker(name: string): Promise<void> {
+    const todayKey = getTodayDateKey();
+    
+    // Load current caretakers
+    const currentCaretakers = loadCaretakers();
+    
+    // Add caretaker using domain function
+    const updatedCaretakers = addCaretakerDomain(currentCaretakers, name);
+    
+    // Only proceed if caretaker was actually added
+    if (updatedCaretakers.length === currentCaretakers.length) {
+      return; // Already exists, no-op
+    }
+    
+    // Save updated caretakers
+    saveCaretakers(updatedCaretakers);
+    
+    // Create system note
+    const systemNote = createCaretakerAddedNote(name);
+    
+    // Load current notes
+    const notesByDate = loadNotesByDate();
+    const todayNotes = notesByDate[todayKey] || [];
+    
+    // Add system note at the beginning
+    const updatedNotes = [systemNote, ...todayNotes];
+    const updatedNotesByDate = { ...notesByDate, [todayKey]: updatedNotes };
+    
+    // Save notes
+    saveNotesByDate(updatedNotesByDate);
+  }
+
+  /**
+   * Remove a caretaker from the notebook
+   */
+  async removeCaretaker(name: string): Promise<void> {
+    const todayKey = getTodayDateKey();
+    const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
+    
+    // Load current caretakers
+    const currentCaretakers = loadCaretakers();
+    
+    // Remove caretaker using domain function (includes guard)
+    const { caretakers: updatedCaretakers, canRemove } = removeCaretakerDomain(currentCaretakers, name, currentCaregiver);
+    
+    // Guard: cannot remove current caregiver
+    if (!canRemove) {
+      throw new Error('Cannot remove the current caregiver');
+    }
+    
+    // Save updated caretakers
+    saveCaretakers(updatedCaretakers);
+    
+    // Create system note
+    const systemNote = createCaretakerRemovedNote(name);
+    
+    // Load current notes
+    const notesByDate = loadNotesByDate();
+    const todayNotes = notesByDate[todayKey] || [];
+    
+    // Add system note at the beginning
+    const updatedNotes = [systemNote, ...todayNotes];
+    const updatedNotesByDate = { ...notesByDate, [todayKey]: updatedNotes };
+    
+    // Save notes
+    saveNotesByDate(updatedNotesByDate);
+  }
+
+  /**
+   * Get the list of all caretakers
+   */
+  async getCaretakers(): Promise<string[]> {
+    return loadCaretakers();
   }
 }
 
