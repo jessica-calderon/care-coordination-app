@@ -4,7 +4,7 @@
  * Implementations can use localStorage, API, or any other persistence mechanism.
  */
 
-import type { CareNote, TodayState, NotesByDate } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 
 export interface DataAdapter {
   /**
@@ -59,16 +59,29 @@ export interface DataAdapter {
   addCaretaker(name: string): Promise<void>;
 
   /**
-   * Remove a caretaker from the notebook
-   * @param name The name of the caretaker to remove
-   * @throws Error if attempting to remove the current caregiver
+   * Archive a caretaker (mark as inactive)
+   * @param name The name of the caretaker to archive
+   * @throws Error if attempting to archive the primary contact or current caregiver
    */
-  removeCaretaker(name: string): Promise<void>;
+  archiveCaretaker(name: string): Promise<void>;
+
+  /**
+   * Restore an archived caretaker (mark as active)
+   * @param name The name of the caretaker to restore
+   */
+  restoreCaretaker(name: string): Promise<void>;
+
+  /**
+   * Set a caretaker as the primary contact
+   * @param name The name of the caretaker to set as primary
+   * @throws Error if attempting to set an inactive caretaker as primary
+   */
+  setPrimaryCaretaker(name: string): Promise<void>;
 
   /**
    * Get the list of all caretakers
-   * @returns Array of caretaker names
+   * @returns Array of caretaker objects
    */
-  getCaretakers(): Promise<string[]>;
+  getCaretakers(): Promise<Caretaker[]>;
 }
 

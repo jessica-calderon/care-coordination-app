@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { todayData } from '../mock/todayData';
-import type { CareNote, NotesByDate } from '../domain/types';
+import type { CareNote, NotesByDate, Caretaker } from '../domain/types';
 import { getTodayDateKey, formatDateLabel, canEditNote } from '../domain/notebook';
 import { dataAdapter } from '../storage';
 import { Icons } from '../ui/icons';
@@ -12,7 +12,7 @@ function Today() {
   const [noteText, setNoteText] = useState('');
   const [lastUpdatedBy, setLastUpdatedBy] = useState(todayData.lastUpdatedBy);
   const [currentCaregiver, setCurrentCaregiver] = useState(todayData.currentCaregiver);
-  const [caretakers, setCaretakers] = useState<string[]>([]);
+  const [caretakers, setCaretakers] = useState<Caretaker[]>([]);
   const [newCaretakerName, setNewCaretakerName] = useState('');
   const [selectedHandoffTarget, setSelectedHandoffTarget] = useState<string>('');
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
@@ -37,10 +37,12 @@ function Today() {
       const loadedCaretakers = todayState.caretakers || [];
       setCaretakers(loadedCaretakers);
       
-      // Initialize handoff target to first available caretaker
-      const otherCaretakers = loadedCaretakers.filter(c => c !== todayState.currentCaregiver);
-      if (otherCaretakers.length > 0) {
-        setSelectedHandoffTarget(otherCaretakers[0]);
+      // Initialize handoff target to first available active caretaker
+      const otherActiveCaretakers = loadedCaretakers.filter(c => 
+        c.isActive && c.name !== todayState.currentCaregiver
+      );
+      if (otherActiveCaretakers.length > 0) {
+        setSelectedHandoffTarget(otherActiveCaretakers[0].name);
       }
       
       // Load notesByDate for history
@@ -68,10 +70,12 @@ function Today() {
         const loadedCaretakers = todayState.caretakers || [];
         setCaretakers(loadedCaretakers);
         
-        // Update handoff target to first available caretaker
-        const otherCaretakers = loadedCaretakers.filter(c => c !== todayState.currentCaregiver);
-        if (otherCaretakers.length > 0) {
-          setSelectedHandoffTarget(otherCaretakers[0]);
+        // Update handoff target to first available active caretaker
+        const otherActiveCaretakers = loadedCaretakers.filter(c => 
+          c.isActive && c.name !== todayState.currentCaregiver
+        );
+        if (otherActiveCaretakers.length > 0) {
+          setSelectedHandoffTarget(otherActiveCaretakers[0].name);
         }
         
         // Reload notesByDate for history
@@ -126,16 +130,18 @@ function Today() {
   };
 
   const handleHandoff = async () => {
-    // Use selected target caregiver, or fallback to first available
-    const otherCaretakers = caretakers.filter(c => c !== currentCaregiver);
+    // Use selected target caregiver, or fallback to first available active caretaker
+    const otherActiveCaretakers = caretakers.filter(c => 
+      c.isActive && c.name !== currentCaregiver
+    );
     let targetCaregiver: string;
     
-    if (selectedHandoffTarget && otherCaretakers.includes(selectedHandoffTarget)) {
+    if (selectedHandoffTarget && otherActiveCaretakers.some(c => c.name === selectedHandoffTarget)) {
       targetCaregiver = selectedHandoffTarget;
-    } else if (otherCaretakers.length > 0) {
-      targetCaregiver = otherCaretakers[0];
+    } else if (otherActiveCaretakers.length > 0) {
+      targetCaregiver = otherActiveCaretakers[0].name;
     } else {
-      // Fallback to default behavior if no other caretakers
+      // Fallback to default behavior if no other active caretakers
       targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
     }
     
@@ -149,10 +155,12 @@ function Today() {
     const updatedCaretakers = todayState.caretakers || [];
     setCaretakers(updatedCaretakers);
     
-    // Update handoff target to first available caretaker after handoff
-    const newOtherCaretakers = updatedCaretakers.filter(c => c !== todayState.currentCaregiver);
-    if (newOtherCaretakers.length > 0) {
-      setSelectedHandoffTarget(newOtherCaretakers[0]);
+    // Update handoff target to first available active caretaker after handoff
+    const newOtherActiveCaretakers = updatedCaretakers.filter(c => 
+      c.isActive && c.name !== todayState.currentCaregiver
+    );
+    if (newOtherActiveCaretakers.length > 0) {
+      setSelectedHandoffTarget(newOtherActiveCaretakers[0].name);
     }
     
     // Reload notesByDate for history
@@ -173,9 +181,11 @@ function Today() {
         setCaretakers(updatedCaretakers);
         
         // Update handoff target if needed
-        const otherCaretakers = updatedCaretakers.filter(c => c !== currentCaregiver);
-        if (otherCaretakers.length > 0 && !otherCaretakers.includes(selectedHandoffTarget)) {
-          setSelectedHandoffTarget(otherCaretakers[0]);
+        const otherActiveCaretakers = updatedCaretakers.filter(c => 
+          c.isActive && c.name !== currentCaregiver
+        );
+        if (otherActiveCaretakers.length > 0 && !otherActiveCaretakers.some(c => c.name === selectedHandoffTarget)) {
+          setSelectedHandoffTarget(otherActiveCaretakers[0].name);
         }
         
         // Reload notesByDate for history
@@ -188,32 +198,80 @@ function Today() {
     }
   };
 
-  const handleRemoveCaretaker = async (name: string) => {
+  const handleArchiveCaretaker = async (name: string) => {
     try {
-      await dataAdapter.removeCaretaker(name);
+      await dataAdapter.archiveCaretaker(name);
       
-        // Reload state from adapter
-        const todayState = await dataAdapter.loadToday();
-        setCareNotes(todayState.careNotes);
-        const updatedCaretakers = todayState.caretakers || [];
-        setCaretakers(updatedCaretakers);
-        
-        // Update handoff target if the removed caretaker was selected
-        if (selectedHandoffTarget === name) {
-          const otherCaretakers = updatedCaretakers.filter(c => c !== currentCaregiver);
-          if (otherCaretakers.length > 0) {
-            setSelectedHandoffTarget(otherCaretakers[0]);
-          } else {
-            setSelectedHandoffTarget('');
-          }
+      // Reload state from adapter
+      const todayState = await dataAdapter.loadToday();
+      setCareNotes(todayState.careNotes);
+      const updatedCaretakers = todayState.caretakers || [];
+      setCaretakers(updatedCaretakers);
+      
+      // Update handoff target if the archived caretaker was selected
+      if (selectedHandoffTarget === name) {
+        const otherActiveCaretakers = updatedCaretakers.filter(c => 
+          c.isActive && c.name !== currentCaregiver
+        );
+        if (otherActiveCaretakers.length > 0) {
+          setSelectedHandoffTarget(otherActiveCaretakers[0].name);
+        } else {
+          setSelectedHandoffTarget('');
         }
-        
-        // Reload notesByDate for history
-        const allNotes = await dataAdapter.getNotesByDate();
-        setNotesByDate(allNotes);
+      }
+      
+      // Reload notesByDate for history
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
     } catch (error) {
-      // Show error message (e.g., trying to remove current caregiver)
-      alert(error instanceof Error ? error.message : 'Cannot remove this caregiver');
+      // Show error message (e.g., trying to archive primary or current caregiver)
+      alert(error instanceof Error ? error.message : 'Cannot archive this caregiver');
+    }
+  };
+
+  const handleRestoreCaretaker = async (name: string) => {
+    try {
+      await dataAdapter.restoreCaretaker(name);
+      
+      // Reload state from adapter
+      const todayState = await dataAdapter.loadToday();
+      setCareNotes(todayState.careNotes);
+      const updatedCaretakers = todayState.caretakers || [];
+      setCaretakers(updatedCaretakers);
+      
+      // Update handoff target if needed
+      const otherActiveCaretakers = updatedCaretakers.filter(c => 
+        c.isActive && c.name !== currentCaregiver
+      );
+      if (otherActiveCaretakers.length > 0 && !otherActiveCaretakers.some(c => c.name === selectedHandoffTarget)) {
+        setSelectedHandoffTarget(otherActiveCaretakers[0].name);
+      }
+      
+      // Reload notesByDate for history
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
+    } catch (error) {
+      // Show error message
+      alert(error instanceof Error ? error.message : 'Cannot restore this caregiver');
+    }
+  };
+
+  const handleSetPrimaryCaretaker = async (name: string) => {
+    try {
+      await dataAdapter.setPrimaryCaretaker(name);
+      
+      // Reload state from adapter
+      const todayState = await dataAdapter.loadToday();
+      setCareNotes(todayState.careNotes);
+      const updatedCaretakers = todayState.caretakers || [];
+      setCaretakers(updatedCaretakers);
+      
+      // Reload notesByDate for history
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
+    } catch (error) {
+      // Show error message
+      alert(error instanceof Error ? error.message : 'Cannot set this caregiver as primary');
     }
   };
 
@@ -528,55 +586,139 @@ function Today() {
             Caretakers
           </h2>
           <div className="space-y-4">
-            {/* Caretaker List */}
-            {caretakers.length === 0 ? (
-              <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
-                No caretakers added yet.
-              </p>
-            ) : (
-              <ul className="space-y-2" role="list" aria-label="List of caretakers">
-                {caretakers.map((caretaker) => {
-                  const isCurrent = caretaker === currentCaregiver;
-                  return (
-                    <li key={caretaker} className="flex items-center justify-between gap-3 py-2 border-b" style={{ borderColor: 'var(--border-color)' }} role="listitem">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="text-base" style={{ color: 'var(--text-primary)' }}>
-                          {caretaker}
-                        </span>
-                        {isCurrent && (
-                          <span className="text-xs px-2 py-0.5 rounded" style={{ 
-                            color: 'var(--text-secondary)',
-                            backgroundColor: 'var(--bg-primary)',
-                            border: '1px solid var(--border-color)'
-                          }}>
-                            Current
-                          </span>
-                        )}
-                      </div>
-                      {isCurrent ? (
-                        <span className="text-sm" style={{ color: 'var(--text-muted)' }} title="Cannot remove the current caregiver">
-                          Cannot remove
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveCaretaker(caretaker)}
-                          className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
-                          style={{ 
-                            color: 'var(--text-secondary)',
-                            backgroundColor: 'transparent',
-                            '--tw-ring-color': 'var(--focus-ring)',
-                          } as React.CSSProperties}
-                          aria-label={`Remove ${caretaker} as a caregiver`}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            {/* Active Caretakers */}
+            {(() => {
+              const activeCaretakers = caretakers.filter(c => c.isActive);
+              const inactiveCaretakers = caretakers.filter(c => !c.isActive);
+              
+              if (caretakers.length === 0) {
+                return (
+                  <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                    No caretakers added yet.
+                  </p>
+                );
+              }
+              
+              return (
+                <>
+                  {/* Active Caretakers List - Always show if there are any caretakers */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+                      Active
+                    </h3>
+                    {activeCaretakers.length > 0 ? (
+                      <ul className="space-y-2" role="list" aria-label="List of active caretakers">
+                        {activeCaretakers.map((caretaker) => {
+                          const isCurrent = caretaker.name === currentCaregiver;
+                          const isPrimary = caretaker.isPrimary;
+                          const canArchive = !isPrimary && !isCurrent;
+                          const canSetPrimary = !isPrimary;
+                          
+                          return (
+                            <li key={caretaker.name} className="flex items-center justify-between gap-3 py-2 border-b" style={{ borderColor: 'var(--border-color)' }} role="listitem">
+                              <div className="flex items-center gap-2 flex-1">
+                                {isPrimary && (
+                                  <span className="text-base" aria-label="Primary contact" title="Primary contact">
+                                    ⭐
+                                  </span>
+                                )}
+                                <span className="text-base" style={{ color: 'var(--text-primary)' }}>
+                                  {caretaker.name}
+                                </span>
+                                {isCurrent && (
+                                  <span className="text-xs px-2 py-0.5 rounded" style={{ 
+                                    color: 'var(--text-secondary)',
+                                    backgroundColor: 'var(--bg-primary)',
+                                    border: '1px solid var(--border-color)'
+                                  }}>
+                                    Current
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {canSetPrimary && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetPrimaryCaretaker(caretaker.name)}
+                                    className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                    style={{ 
+                                      color: 'var(--text-secondary)',
+                                      backgroundColor: 'transparent',
+                                      '--tw-ring-color': 'var(--focus-ring)',
+                                    } as React.CSSProperties}
+                                    aria-label={`Set ${caretaker.name} as primary contact`}
+                                  >
+                                    Set as primary
+                                  </button>
+                                )}
+                                {canArchive ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleArchiveCaretaker(caretaker.name)}
+                                    className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                    style={{ 
+                                      color: 'var(--text-secondary)',
+                                      backgroundColor: 'transparent',
+                                      '--tw-ring-color': 'var(--focus-ring)',
+                                    } as React.CSSProperties}
+                                    aria-label={`Archive ${caretaker.name}`}
+                                  >
+                                    Archive
+                                  </button>
+                                ) : (
+                                  <span className="text-sm" style={{ color: 'var(--text-muted)' }} title={isPrimary ? 'Cannot archive primary contact' : 'Cannot archive current caregiver'}>
+                                    {isPrimary ? 'Primary' : 'Current'}
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                        No active caretakers. Please restore a caretaker below or add a new one.
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Inactive Caretakers List */}
+                  {inactiveCaretakers.length > 0 && (
+                    <div className="space-y-2 mt-4">
+                      <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+                        Inactive
+                      </h3>
+                      <ul className="space-y-2" role="list" aria-label="List of inactive caretakers">
+                        {inactiveCaretakers.map((caretaker) => {
+                          return (
+                            <li key={caretaker.name} className="flex items-center justify-between gap-3 py-2 border-b" style={{ borderColor: 'var(--border-color)' }} role="listitem">
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="text-base" style={{ color: 'var(--text-muted)' }}>
+                                  {caretaker.name}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreCaretaker(caretaker.name)}
+                                className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                style={{ 
+                                  color: 'var(--text-secondary)',
+                                  backgroundColor: 'transparent',
+                                  '--tw-ring-color': 'var(--focus-ring)',
+                                } as React.CSSProperties}
+                                aria-label={`Restore ${caretaker.name}`}
+                              >
+                                Restore
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             
             {/* Add Caretaker Input */}
             <form 
@@ -637,11 +779,13 @@ function Today() {
               Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
             </p>
             {(() => {
-              // Get available caretakers for handoff
-              const otherCaretakers = caretakers.filter(c => c !== currentCaregiver);
+              // Get available active caretakers for handoff (exclude current)
+              const otherActiveCaretakers = caretakers.filter(c => 
+                c.isActive && c.name !== currentCaregiver
+              );
               
-              if (otherCaretakers.length === 0) {
-                // Fallback to default behavior if no other caretakers
+              if (otherActiveCaretakers.length === 0) {
+                // Fallback to default behavior if no other active caretakers
                 const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
                 return (
                   <button
@@ -667,9 +811,9 @@ function Today() {
                 );
               }
               
-              if (otherCaretakers.length === 1) {
+              if (otherActiveCaretakers.length === 1) {
                 // Single option: show button
-                const targetCaregiver = otherCaretakers[0];
+                const targetCaregiver = otherActiveCaretakers[0].name;
                 return (
                   <button
                     type="button"
@@ -714,9 +858,9 @@ function Today() {
                       } as React.CSSProperties}
                       aria-label="Select caregiver to hand off care to"
                     >
-                      {otherCaretakers.map((caretaker) => (
-                        <option key={caretaker} value={caretaker}>
-                          {caretaker}
+                      {otherActiveCaretakers.map((caretaker) => (
+                        <option key={caretaker.name} value={caretaker.name}>
+                          {caretaker.name}
                         </option>
                       ))}
                     </select>

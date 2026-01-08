@@ -4,7 +4,7 @@
  * Input → output only.
  */
 
-import type { CareNote } from './types';
+import type { CareNote, Caretaker } from './types';
 
 /**
  * Get today's date in YYYY-MM-DD format
@@ -155,37 +155,140 @@ export function updateCareNote(note: CareNote, newNoteText: string): CareNote {
 /**
  * Add a caretaker to the list (pure function)
  * Returns a new array with the caretaker added if not already present
+ * New caretakers are added as active and non-primary
  */
-export function addCaretaker(caretakers: string[], name: string): string[] {
+export function addCaretaker(caretakers: Caretaker[], name: string): Caretaker[] {
   const trimmedName = name.trim();
   if (!trimmedName) {
     return caretakers;
   }
   // Check if already exists (case-insensitive)
-  const exists = caretakers.some(c => c.toLowerCase() === trimmedName.toLowerCase());
+  const exists = caretakers.some(c => c.name.toLowerCase() === trimmedName.toLowerCase());
   if (exists) {
     return caretakers;
   }
-  return [...caretakers, trimmedName];
+  // If this is the first caretaker, make them primary
+  const isFirst = caretakers.length === 0;
+  return [...caretakers, { name: trimmedName, isPrimary: isFirst, isActive: true }];
 }
 
 /**
- * Remove a caretaker from the list (pure function)
- * Guards against removing the current caretaker
- * Returns the original array if guard fails, otherwise returns new array without the caretaker
+ * Set a caretaker as primary (pure function)
+ * Enforces invariants:
+ * - Only one primary contact at a time
+ * - Primary contact must be active
+ * Returns new array with updated primary status
  */
-export function removeCaretaker(caretakers: string[], name: string, currentCaretaker: string): { caretakers: string[]; canRemove: boolean } {
+export function setPrimaryCaretaker(caretakers: Caretaker[], name: string, currentCaregiver: string): { caretakers: Caretaker[]; canSetPrimary: boolean; reason?: string } {
   const trimmedName = name.trim();
   if (!trimmedName) {
-    return { caretakers, canRemove: false };
+    return { caretakers, canSetPrimary: false, reason: 'Invalid name' };
   }
-  // Guard: cannot remove current caretaker
-  if (trimmedName.toLowerCase() === currentCaretaker.toLowerCase()) {
-    return { caretakers, canRemove: false };
+  
+  // Find the caretaker
+  const caretakerIndex = caretakers.findIndex(c => c.name.toLowerCase() === trimmedName.toLowerCase());
+  if (caretakerIndex === -1) {
+    return { caretakers, canSetPrimary: false, reason: 'Caretaker not found' };
   }
-  // Remove the caretaker (case-insensitive)
-  const updated = caretakers.filter(c => c.toLowerCase() !== trimmedName.toLowerCase());
-  return { caretakers: updated, canRemove: true };
+  
+  const caretaker = caretakers[caretakerIndex];
+  
+  // Guard: primary contact must be active
+  if (!caretaker.isActive) {
+    return { caretakers, canSetPrimary: false, reason: 'Cannot set inactive caretaker as primary' };
+  }
+  
+  // If already primary, no-op
+  if (caretaker.isPrimary) {
+    return { caretakers, canSetPrimary: true };
+  }
+  
+  // Update all caretakers: clear existing primary, set new primary
+  const updated = caretakers.map(c => ({
+    ...c,
+    isPrimary: c.name.toLowerCase() === trimmedName.toLowerCase()
+  }));
+  
+  return { caretakers: updated, canSetPrimary: true };
+}
+
+/**
+ * Archive a caretaker (pure function)
+ * Enforces invariants:
+ * - Cannot archive primary contact
+ * - Cannot archive current caregiver
+ * Returns new array with caretaker marked as inactive
+ */
+export function archiveCaretaker(caretakers: Caretaker[], name: string, currentCaregiver: string): { caretakers: Caretaker[]; canArchive: boolean; reason?: string } {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { caretakers, canArchive: false, reason: 'Invalid name' };
+  }
+  
+  // Find the caretaker
+  const caretakerIndex = caretakers.findIndex(c => c.name.toLowerCase() === trimmedName.toLowerCase());
+  if (caretakerIndex === -1) {
+    return { caretakers, canArchive: false, reason: 'Caretaker not found' };
+  }
+  
+  const caretaker = caretakers[caretakerIndex];
+  
+  // Guard: cannot archive primary contact
+  if (caretaker.isPrimary) {
+    return { caretakers, canArchive: false, reason: 'Cannot archive primary contact' };
+  }
+  
+  // Guard: cannot archive current caregiver
+  if (trimmedName.toLowerCase() === currentCaregiver.toLowerCase()) {
+    return { caretakers, canArchive: false, reason: 'Cannot archive current caregiver' };
+  }
+  
+  // If already archived, no-op
+  if (!caretaker.isActive) {
+    return { caretakers, canArchive: true };
+  }
+  
+  // Mark as inactive
+  const updated = caretakers.map(c => 
+    c.name.toLowerCase() === trimmedName.toLowerCase()
+      ? { ...c, isActive: false }
+      : c
+  );
+  
+  return { caretakers: updated, canArchive: true };
+}
+
+/**
+ * Restore an archived caretaker (pure function)
+ * Returns new array with caretaker marked as active
+ */
+export function restoreCaretaker(caretakers: Caretaker[], name: string): { caretakers: Caretaker[]; canRestore: boolean; reason?: string } {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { caretakers, canRestore: false, reason: 'Invalid name' };
+  }
+  
+  // Find the caretaker
+  const caretakerIndex = caretakers.findIndex(c => c.name.toLowerCase() === trimmedName.toLowerCase());
+  if (caretakerIndex === -1) {
+    return { caretakers, canRestore: false, reason: 'Caretaker not found' };
+  }
+  
+  const caretaker = caretakers[caretakerIndex];
+  
+  // If already active, no-op
+  if (caretaker.isActive) {
+    return { caretakers, canRestore: true };
+  }
+  
+  // Mark as active
+  const updated = caretakers.map(c => 
+    c.name.toLowerCase() === trimmedName.toLowerCase()
+      ? { ...c, isActive: true }
+      : c
+  );
+  
+  return { caretakers: updated, canRestore: true };
 }
 
 /**
@@ -200,12 +303,34 @@ export function createCaretakerAddedNote(name: string): CareNote {
 }
 
 /**
- * Create a system note for caretaker removed (pure function)
+ * Create a system note for caretaker archived (pure function)
  */
-export function createCaretakerRemovedNote(name: string): CareNote {
+export function createCaretakerArchivedNote(name: string): CareNote {
   return {
     time: formatTime(new Date()),
-    note: `${name} was removed as a caretaker.`,
+    note: `${name} was archived as a caretaker.`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for caretaker restored (pure function)
+ */
+export function createCaretakerRestoredNote(name: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${name} was restored as a caretaker.`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for primary contact changed (pure function)
+ */
+export function createPrimaryContactChangedNote(name: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${name} was set as the primary contact.`,
     author: 'System'
   };
 }

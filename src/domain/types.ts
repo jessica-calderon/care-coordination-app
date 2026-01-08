@@ -16,12 +16,18 @@ export interface Task {
   completed: boolean;
 }
 
+export interface Caretaker {
+  name: string;
+  isPrimary: boolean;
+  isActive: boolean;
+}
+
 export interface TodayState {
   careNotes: CareNote[];
   tasks: Task[];
   lastUpdatedBy: string;
   currentCaregiver: string;
-  caretakers: string[];
+  caretakers: Caretaker[];
 }
 
 /**

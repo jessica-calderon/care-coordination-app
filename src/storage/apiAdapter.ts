@@ -8,7 +8,7 @@
  */
 
 import type { DataAdapter } from './DataAdapter';
-import type { CareNote, TodayState, NotesByDate } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 
 /**
  * Base API URL - can be configured via environment variable in the future
@@ -120,19 +120,37 @@ export class ApiAdapter implements DataAdapter {
   }
 
   /**
-   * Remove a caretaker from the notebook
+   * Archive a caretaker (mark as inactive)
    */
-  async removeCaretaker(name: string): Promise<void> {
-    await apiRequest<void>(`/caretakers/${encodeURIComponent(name)}`, {
-      method: 'DELETE',
+  async archiveCaretaker(name: string): Promise<void> {
+    await apiRequest<void>(`/caretakers/${encodeURIComponent(name)}/archive`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Restore an archived caretaker (mark as active)
+   */
+  async restoreCaretaker(name: string): Promise<void> {
+    await apiRequest<void>(`/caretakers/${encodeURIComponent(name)}/restore`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Set a caretaker as the primary contact
+   */
+  async setPrimaryCaretaker(name: string): Promise<void> {
+    await apiRequest<void>(`/caretakers/${encodeURIComponent(name)}/primary`, {
+      method: 'POST',
     });
   }
 
   /**
    * Get the list of all caretakers
    */
-  async getCaretakers(): Promise<string[]> {
-    return apiRequest<string[]>('/caretakers');
+  async getCaretakers(): Promise<Caretaker[]> {
+    return apiRequest<Caretaker[]>('/caretakers');
   }
 }
 

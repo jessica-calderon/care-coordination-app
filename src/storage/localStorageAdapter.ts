@@ -5,8 +5,8 @@
  */
 
 import type { DataAdapter } from './DataAdapter';
-import type { CareNote, TodayState, NotesByDate } from '../domain/types';
-import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, removeCaretaker as removeCaretakerDomain, createCaretakerAddedNote, createCaretakerRemovedNote } from '../domain/notebook';
+import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
+import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote } from '../domain/notebook';
 import { todayData } from '../mock/todayData';
 
 const STORAGE_KEY_NOTES_BY_DATE = 'care-app-notes-by-date';
@@ -100,14 +100,44 @@ function saveNotesByDate(notesByDate: NotesByDate): void {
 /**
  * Load caretakers from localStorage
  * Returns default caretakers if none exist
+ * Migrates old string[] format to Caretaker[] format
  */
-function loadCaretakers(): string[] {
+function loadCaretakers(): Caretaker[] {
   const saved = localStorage.getItem(STORAGE_KEY_CARETAKERS);
   if (saved) {
     try {
-      const caretakers: string[] = JSON.parse(saved);
-      if (Array.isArray(caretakers)) {
-        return caretakers;
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        // Check if it's old format (string[]) or new format (Caretaker[])
+        if (parsed.length > 0 && typeof parsed[0] === 'string') {
+          // Migrate old format: convert string[] to Caretaker[]
+          // First caretaker becomes primary, all are active
+          const migrated: Caretaker[] = parsed.map((name: string, index: number) => ({
+            name,
+            isPrimary: index === 0,
+            isActive: true
+          }));
+          // Save migrated format
+          saveCaretakers(migrated);
+          return migrated;
+        } else {
+          // New format: validate and ensure at least one primary
+          const caretakers: Caretaker[] = parsed;
+          const hasPrimary = caretakers.some(c => c.isPrimary);
+          if (!hasPrimary && caretakers.length > 0) {
+            // If no primary, set first active caretaker as primary
+            const firstActive = caretakers.find(c => c.isActive);
+            if (firstActive) {
+              const updated = caretakers.map(c => ({
+                ...c,
+                isPrimary: c.name === firstActive.name
+              }));
+              saveCaretakers(updated);
+              return updated;
+            }
+          }
+          return caretakers;
+        }
       }
     } catch (e) {
       // If parsing fails, return defaults
@@ -116,23 +146,30 @@ function loadCaretakers(): string[] {
   // Default caretakers: initialize with current caregiver if it exists
   const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
   // Initialize with current caregiver and the other default (Lupe or Maria)
-  // Ensure current caregiver is always first, and include the other default if different
-  const defaultCaretakers = [currentCaregiver];
+  // Ensure current caregiver is primary, and include the other default if different
+  const defaultCaretakers: Caretaker[] = [
+    { name: currentCaregiver, isPrimary: true, isActive: true }
+  ];
   if (currentCaregiver === 'Lupe') {
-    defaultCaretakers.push('Maria');
+    defaultCaretakers.push({ name: 'Maria', isPrimary: false, isActive: true });
   } else if (currentCaregiver === 'Maria') {
-    defaultCaretakers.push('Lupe');
+    defaultCaretakers.push({ name: 'Lupe', isPrimary: false, isActive: true });
   } else {
     // If current caregiver is neither default, include both defaults
-    defaultCaretakers.push('Lupe', 'Maria');
+    defaultCaretakers.push(
+      { name: 'Lupe', isPrimary: false, isActive: true },
+      { name: 'Maria', isPrimary: false, isActive: true }
+    );
   }
+  // Save defaults to localStorage so they persist and show up immediately
+  saveCaretakers(defaultCaretakers);
   return defaultCaretakers;
 }
 
 /**
  * Save caretakers to localStorage
  */
-function saveCaretakers(caretakers: string[]): void {
+function saveCaretakers(caretakers: Caretaker[]): void {
   localStorage.setItem(STORAGE_KEY_CARETAKERS, JSON.stringify(caretakers));
 }
 
@@ -160,10 +197,64 @@ export class LocalStorageAdapter implements DataAdapter {
     // Load caretakers
     let caretakers = loadCaretakers();
     
-    // Ensure current caregiver is always in the list
-    const currentInList = caretakers.some(c => c.toLowerCase() === currentCaregiver.toLowerCase());
-    if (!currentInList) {
-      caretakers = [currentCaregiver, ...caretakers];
+    // Ensure current caregiver is always in the list and active
+    const currentCaretakerIndex = caretakers.findIndex(c => c.name.toLowerCase() === currentCaregiver.toLowerCase());
+    if (currentCaretakerIndex === -1) {
+      // Add current caregiver as active, and make them primary if no primary exists
+      const hasPrimary = caretakers.some(c => c.isPrimary);
+      caretakers = [
+        { name: currentCaregiver, isPrimary: !hasPrimary, isActive: true },
+        ...caretakers
+      ];
+      saveCaretakers(caretakers);
+    } else {
+      // Ensure current caregiver is always active
+      const currentCaretaker = caretakers[currentCaretakerIndex];
+      if (!currentCaretaker.isActive) {
+        caretakers = caretakers.map(c => 
+          c.name.toLowerCase() === currentCaregiver.toLowerCase()
+            ? { ...c, isActive: true }
+            : c
+        );
+        saveCaretakers(caretakers);
+      }
+    }
+    
+    // Ensure exactly one primary contact
+    const primaryCount = caretakers.filter(c => c.isPrimary).length;
+    if (primaryCount === 0 && caretakers.length > 0) {
+      // Set first active caretaker as primary (prefer current caregiver)
+      const currentCaretaker = caretakers.find(c => c.name.toLowerCase() === currentCaregiver.toLowerCase() && c.isActive);
+      const firstActive = currentCaretaker || caretakers.find(c => c.isActive);
+      if (firstActive) {
+        caretakers = caretakers.map(c => ({
+          ...c,
+          isPrimary: c.name === firstActive.name
+        }));
+        saveCaretakers(caretakers);
+      }
+    } else if (primaryCount > 1) {
+      // Multiple primaries: keep first, clear others
+      let foundFirst = false;
+      caretakers = caretakers.map(c => {
+        if (c.isPrimary && !foundFirst) {
+          foundFirst = true;
+          return c;
+        }
+        return { ...c, isPrimary: false };
+      });
+      saveCaretakers(caretakers);
+    }
+    
+    // Final safety check: ensure at least one active caretaker exists
+    const activeCount = caretakers.filter(c => c.isActive).length;
+    if (activeCount === 0 && caretakers.length > 0) {
+      // If no active caretakers, activate the current caregiver
+      caretakers = caretakers.map(c => 
+        c.name.toLowerCase() === currentCaregiver.toLowerCase()
+          ? { ...c, isActive: true, isPrimary: true }
+          : c
+      );
       saveCaretakers(caretakers);
     }
     
@@ -356,28 +447,99 @@ export class LocalStorageAdapter implements DataAdapter {
   }
 
   /**
-   * Remove a caretaker from the notebook
+   * Archive a caretaker (mark as inactive)
    */
-  async removeCaretaker(name: string): Promise<void> {
+  async archiveCaretaker(name: string): Promise<void> {
     const todayKey = getTodayDateKey();
     const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
     
     // Load current caretakers
     const currentCaretakers = loadCaretakers();
     
-    // Remove caretaker using domain function (includes guard)
-    const { caretakers: updatedCaretakers, canRemove } = removeCaretakerDomain(currentCaretakers, name, currentCaregiver);
+    // Archive caretaker using domain function (includes guards)
+    const { caretakers: updatedCaretakers, canArchive, reason } = archiveCaretakerDomain(currentCaretakers, name, currentCaregiver);
     
-    // Guard: cannot remove current caregiver
-    if (!canRemove) {
-      throw new Error('Cannot remove the current caregiver');
+    // Guard: check if archiving is allowed
+    if (!canArchive) {
+      throw new Error(reason || 'Cannot archive this caretaker');
     }
     
     // Save updated caretakers
     saveCaretakers(updatedCaretakers);
     
     // Create system note
-    const systemNote = createCaretakerRemovedNote(name);
+    const systemNote = createCaretakerArchivedNote(name);
+    
+    // Load current notes
+    const notesByDate = loadNotesByDate();
+    const todayNotes = notesByDate[todayKey] || [];
+    
+    // Add system note at the beginning
+    const updatedNotes = [systemNote, ...todayNotes];
+    const updatedNotesByDate = { ...notesByDate, [todayKey]: updatedNotes };
+    
+    // Save notes
+    saveNotesByDate(updatedNotesByDate);
+  }
+
+  /**
+   * Restore an archived caretaker (mark as active)
+   */
+  async restoreCaretaker(name: string): Promise<void> {
+    const todayKey = getTodayDateKey();
+    
+    // Load current caretakers
+    const currentCaretakers = loadCaretakers();
+    
+    // Restore caretaker using domain function
+    const { caretakers: updatedCaretakers, canRestore, reason } = restoreCaretakerDomain(currentCaretakers, name);
+    
+    // Guard: check if restore is allowed
+    if (!canRestore) {
+      throw new Error(reason || 'Cannot restore this caretaker');
+    }
+    
+    // Save updated caretakers
+    saveCaretakers(updatedCaretakers);
+    
+    // Create system note
+    const systemNote = createCaretakerRestoredNote(name);
+    
+    // Load current notes
+    const notesByDate = loadNotesByDate();
+    const todayNotes = notesByDate[todayKey] || [];
+    
+    // Add system note at the beginning
+    const updatedNotes = [systemNote, ...todayNotes];
+    const updatedNotesByDate = { ...notesByDate, [todayKey]: updatedNotes };
+    
+    // Save notes
+    saveNotesByDate(updatedNotesByDate);
+  }
+
+  /**
+   * Set a caretaker as the primary contact
+   */
+  async setPrimaryCaretaker(name: string): Promise<void> {
+    const todayKey = getTodayDateKey();
+    const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER) || todayData.currentCaregiver;
+    
+    // Load current caretakers
+    const currentCaretakers = loadCaretakers();
+    
+    // Set primary using domain function (includes guards)
+    const { caretakers: updatedCaretakers, canSetPrimary, reason } = setPrimaryCaretakerDomain(currentCaretakers, name, currentCaregiver);
+    
+    // Guard: check if setting primary is allowed
+    if (!canSetPrimary) {
+      throw new Error(reason || 'Cannot set this caretaker as primary');
+    }
+    
+    // Save updated caretakers
+    saveCaretakers(updatedCaretakers);
+    
+    // Create system note
+    const systemNote = createPrimaryContactChangedNote(name);
     
     // Load current notes
     const notesByDate = loadNotesByDate();
@@ -394,7 +556,7 @@ export class LocalStorageAdapter implements DataAdapter {
   /**
    * Get the list of all caretakers
    */
-  async getCaretakers(): Promise<string[]> {
+  async getCaretakers(): Promise<Caretaker[]> {
     return loadCaretakers();
   }
 }
