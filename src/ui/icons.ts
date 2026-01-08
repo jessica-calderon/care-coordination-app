@@ -12,7 +12,9 @@ import {
   faPenToSquare,
   faFileLines,
   faMoon,
-  faSun
+  faSun,
+  faChevronDown,
+  faChevronUp
 } from '@fortawesome/free-solid-svg-icons';
 
 export const Icons = {
@@ -30,5 +32,7 @@ export const Icons = {
   careNotes: faFileLines, // Document icon for Care Notes section
   moon: faMoon,
   sun: faSun,
+  chevronDown: faChevronDown,
+  chevronUp: faChevronUp,
 };
 

@@ -17,6 +17,9 @@ function Today() {
   const [selectedHandoffTarget, setSelectedHandoffTarget] = useState<string>('');
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
+  const [isCareNotesExpanded, setIsCareNotesExpanded] = useState(false);
+  const [isCaretakersExpanded, setIsCaretakersExpanded] = useState(false);
+  const [isEarlierExpanded, setIsEarlierExpanded] = useState(false);
 
   // Track the last date we checked to avoid unnecessary updates
   const lastCheckedDateRef = useRef<string>(getTodayDateKey());
@@ -332,7 +335,7 @@ function Today() {
         )}
 
         {/* Quick Note Section */}
-        <section className="mb-10" aria-labelledby="quick-note-heading">
+        <section className="mb-12" aria-labelledby="quick-note-heading">
           <h2 id="quick-note-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
             <FontAwesomeIcon icon={Icons.quickNote} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Quick note
@@ -385,12 +388,35 @@ function Today() {
           </form>
         </section>
 
-        {/* Care Notes Section */}
-        <section className="mb-10" aria-labelledby="care-notes-heading">
-          <h2 id="care-notes-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
-            <FontAwesomeIcon icon={Icons.careNotes} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-            Care Notes
-          </h2>
+        {/* Care Notes Section - Collapsible */}
+        <section className="mb-6" aria-labelledby="care-notes-heading">
+          <button
+            type="button"
+            onClick={() => setIsCareNotesExpanded(!isCareNotesExpanded)}
+            className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2"
+            style={{ 
+              '--tw-ring-color': 'var(--focus-ring)',
+            } as React.CSSProperties}
+            aria-expanded={isCareNotesExpanded}
+            aria-controls="care-notes-content"
+          >
+            <h2 id="care-notes-heading" className="text-lg font-normal inline-flex items-center" style={{ color: 'var(--text-secondary)' }}>
+              <FontAwesomeIcon icon={Icons.careNotes} className="mr-2 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+              Care Notes
+              {careNotes.length > 0 && (
+                <span className="ml-2 text-sm font-normal" style={{ color: 'var(--text-muted)' }}>
+                  ({careNotes.length})
+                </span>
+              )}
+            </h2>
+            <FontAwesomeIcon 
+              icon={isCareNotesExpanded ? Icons.chevronUp : Icons.chevronDown} 
+              className="opacity-50" 
+              style={{ fontSize: '0.75em' }} 
+              aria-hidden="true" 
+            />
+          </button>
+          <div id="care-notes-content" className={isCareNotesExpanded ? '' : 'hidden'}>
           {careNotes.length === 0 ? (
             <div className="py-6" role="status" aria-live="polite">
               <p className="text-base mb-2" style={{ color: 'var(--text-secondary)' }}>
@@ -528,10 +554,11 @@ function Today() {
               })}
             </div>
           )}
+          </div>
         </section>
 
         {/* What matters next Section */}
-        <section className="mb-10" aria-labelledby="tasks-heading">
+        <section className="mb-12" aria-labelledby="tasks-heading">
           <h2 id="tasks-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
             <FontAwesomeIcon icon={Icons.tasks} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             What matters next
@@ -579,12 +606,30 @@ function Today() {
           )}
         </section>
 
-        {/* Caretakers Section */}
-        <section className="mb-10" aria-labelledby="caretakers-heading">
-          <h2 id="caretakers-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
-            <FontAwesomeIcon icon={Icons.caregiver} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-            Caretakers
-          </h2>
+        {/* Caretakers Section - Collapsible */}
+        <section className="mb-6" aria-labelledby="caretakers-heading">
+          <button
+            type="button"
+            onClick={() => setIsCaretakersExpanded(!isCaretakersExpanded)}
+            className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2"
+            style={{ 
+              '--tw-ring-color': 'var(--focus-ring)',
+            } as React.CSSProperties}
+            aria-expanded={isCaretakersExpanded}
+            aria-controls="caretakers-content"
+          >
+            <h2 id="caretakers-heading" className="text-lg font-normal inline-flex items-center" style={{ color: 'var(--text-secondary)' }}>
+              <FontAwesomeIcon icon={Icons.caregiver} className="mr-2 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+              Caretakers
+            </h2>
+            <FontAwesomeIcon 
+              icon={isCaretakersExpanded ? Icons.chevronUp : Icons.chevronDown} 
+              className="opacity-50" 
+              style={{ fontSize: '0.75em' }} 
+              aria-hidden="true" 
+            />
+          </button>
+          <div id="caretakers-content" className={isCaretakersExpanded ? '' : 'hidden'}>
           <div className="space-y-4">
             {/* Active Caretakers */}
             {(() => {
@@ -763,10 +808,11 @@ function Today() {
               </button>
             </form>
           </div>
+          </div>
         </section>
 
         {/* Handoff Section */}
-        <section className="border-t pt-6 mt-8" style={{ borderColor: 'var(--border-color)' }} aria-labelledby="handoff-heading">
+        <section className="border-t pt-8 mt-10" style={{ borderColor: 'var(--border-color)' }} aria-labelledby="handoff-heading">
           <h2 id="handoff-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
             <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Handoff
@@ -891,17 +937,35 @@ function Today() {
           </div>
         </section>
 
-        {/* Earlier Section */}
+        {/* Earlier Section - Collapsible */}
         {(() => {
           const historyEntries = getHistoryEntries();
           if (historyEntries.length === 0) return null;
           
           return (
-            <section className="border-t pt-6 mt-8" style={{ borderColor: 'var(--border-color)' }} aria-labelledby="earlier-heading">
-              <h2 id="earlier-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
-                <FontAwesomeIcon icon={Icons.careNotes} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-                Earlier
-              </h2>
+            <section className="border-t pt-6 mt-6" style={{ borderColor: 'var(--border-color)' }} aria-labelledby="earlier-heading">
+              <button
+                type="button"
+                onClick={() => setIsEarlierExpanded(!isEarlierExpanded)}
+                className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2"
+                style={{ 
+                  '--tw-ring-color': 'var(--focus-ring)',
+                } as React.CSSProperties}
+                aria-expanded={isEarlierExpanded}
+                aria-controls="earlier-content"
+              >
+                <h2 id="earlier-heading" className="text-lg font-normal inline-flex items-center" style={{ color: 'var(--text-secondary)' }}>
+                  <FontAwesomeIcon icon={Icons.careNotes} className="mr-2 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                  Earlier
+                </h2>
+                <FontAwesomeIcon 
+                  icon={isEarlierExpanded ? Icons.chevronUp : Icons.chevronDown} 
+                  className="opacity-50" 
+                  style={{ fontSize: '0.75em' }} 
+                  aria-hidden="true" 
+                />
+              </button>
+              <div id="earlier-content" className={isEarlierExpanded ? '' : 'hidden'}>
               <div className="space-y-6" role="list" aria-label="Earlier care notes">
                 {historyEntries.map((entry) => (
                   <div key={entry.dateKey} role="listitem">
@@ -964,6 +1028,7 @@ function Today() {
                     </ul>
                   </div>
                 ))}
+              </div>
               </div>
             </section>
           );
