@@ -8,8 +8,8 @@
 import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 import { firestore } from '../firebase/config';
-import { getTodayDateKey } from '../domain/notebook';
-import { doc, getDoc } from 'firebase/firestore';
+import { getTodayDateKey, createCareNote } from '../domain/notebook';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { todayData } from '../mock/todayData';
 
 export class FirebaseAdapter implements DataAdapter {
@@ -80,21 +80,86 @@ export class FirebaseAdapter implements DataAdapter {
 
   /**
    * Add a new care note
-   * Stub: Returns a note with current timestamp but doesn't persist
+   * Reads current TodayState from Firestore, adds the note, and writes back.
+   * Also updates localStorage as a cache.
    */
   async addNote(noteText: string): Promise<CareNote> {
-    // TODO: Implement Firestore write
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    });
-    return {
-      time,
-      note: noteText,
-      author: todayData.currentCaregiver
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore
+    const docSnap = await getDoc(docRef);
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      // Document doesn't exist - initialize empty TodayState
+      todayState = {
+        careNotes: [],
+        tasks: todayData.tasks || [],
+        currentCaregiver: localStorage.getItem('care-app-current-caregiver') || todayData.currentCaregiver,
+        lastUpdatedBy: localStorage.getItem('care-app-last-updated-by') || todayData.lastUpdatedBy,
+        caretakers: []
+      };
+    } else {
+      // Document exists - use existing data
+      const data = docSnap.data();
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: data.tasks || todayData.tasks || [],
+        currentCaregiver: data.currentCaregiver || localStorage.getItem('care-app-current-caregiver') || todayData.currentCaregiver,
+        lastUpdatedBy: data.lastUpdatedBy || localStorage.getItem('care-app-last-updated-by') || todayData.lastUpdatedBy,
+        caretakers: data.caretakers || []
+      };
+    }
+    
+    // Get current caregiver for note author
+    const currentCaregiver = todayState.currentCaregiver;
+    
+    // Create new note using domain helper
+    const newNote = createCareNote(noteText, currentCaregiver);
+    
+    // Append note at the beginning of careNotes array (matching localStorage behavior)
+    const updatedCareNotes = [newNote, ...todayState.careNotes];
+    
+    // Update TodayState with new note
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      careNotes: updatedCareNotes,
+      lastUpdatedBy: currentCaregiver
     };
+    
+    // Write updated TodayState to Firestore using merge: true
+    await setDoc(docRef, updatedTodayState, { merge: true });
+    
+    // Update localStorage as a cache
+    // Update notes by date
+    const notesByDateStr = localStorage.getItem('care-app-notes-by-date');
+    let notesByDate: NotesByDate = {};
+    if (notesByDateStr) {
+      try {
+        notesByDate = JSON.parse(notesByDateStr);
+      } catch (e) {
+        // If parsing fails, start with empty object
+        notesByDate = {};
+      }
+    }
+    notesByDate[dateKey] = updatedCareNotes;
+    localStorage.setItem('care-app-notes-by-date', JSON.stringify(notesByDate));
+    
+    // Update current caregiver and last updated by if they changed
+    if (updatedTodayState.currentCaregiver) {
+      localStorage.setItem('care-app-current-caregiver', updatedTodayState.currentCaregiver);
+    }
+    if (updatedTodayState.lastUpdatedBy) {
+      localStorage.setItem('care-app-last-updated-by', updatedTodayState.lastUpdatedBy);
+    }
+    
+    // Update caretakers if they exist
+    if (updatedTodayState.caretakers && updatedTodayState.caretakers.length > 0) {
+      localStorage.setItem('care-app-caretakers', JSON.stringify(updatedTodayState.caretakers));
+    }
+    
+    return newNote;
   }
 
   /**
