@@ -1,17 +1,20 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import AppShell from './app/AppShell';
-import Landing from './pages/Landing';
-import Today from './pages/Today';
-import CareTeam from './pages/CareTeam';
-import About from './pages/About';
-import HowItWorks from './pages/HowItWorks';
-import Privacy from './pages/Privacy';
 import Footer from './components/Footer';
 import CareeNameModal from './components/CareeNameModal';
+import { Spinner } from './components/Spinner';
 import { createDataAdapter, createFirebaseAdapter } from './storage';
 import { DataAdapterContext } from './storage/DataAdapterContext';
 import { resolveNotebookId, createNewNotebook, switchToNotebook, updateUrlWithNotebookId } from './utils/notebookId';
 import { readNotebookIndex } from './domain/notebook';
+
+// Lazy load page components for code splitting
+const Landing = lazy(() => import('./pages/Landing'));
+const Today = lazy(() => import('./pages/Today'));
+const CareTeam = lazy(() => import('./pages/CareTeam'));
+const About = lazy(() => import('./pages/About'));
+const HowItWorks = lazy(() => import('./pages/HowItWorks'));
+const Privacy = lazy(() => import('./pages/Privacy'));
 
 const STORAGE_KEY_VIEW = 'care-app-view';
 
@@ -135,24 +138,30 @@ function App() {
         onNavigateBack={currentView === 'careTeam' ? handleNavigateBack : undefined}
         currentView={currentView}
       >
-        {currentView === 'today' ? (
-          <Today key={currentNotebookId} />
-        ) : currentView === 'careTeam' ? (
-          <CareTeam key={currentNotebookId} />
-        ) : currentView === 'about' ? (
-          <About />
-        ) : currentView === 'howItWorks' ? (
-          <HowItWorks />
-        ) : currentView === 'privacy' ? (
-          <Privacy />
-        ) : (
-          <Landing 
-            onStartNotebook={handleStartNotebook}
-            onSwitchNotebook={handleSwitchNotebook}
-            onCreateAnotherNotebook={handleCreateAnotherNotebook}
-            notebookIndex={notebookIndex}
-          />
-        )}
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Spinner size="lg" />
+          </div>
+        }>
+          {currentView === 'today' ? (
+            <Today key={currentNotebookId} />
+          ) : currentView === 'careTeam' ? (
+            <CareTeam key={currentNotebookId} />
+          ) : currentView === 'about' ? (
+            <About />
+          ) : currentView === 'howItWorks' ? (
+            <HowItWorks />
+          ) : currentView === 'privacy' ? (
+            <Privacy />
+          ) : (
+            <Landing 
+              onStartNotebook={handleStartNotebook}
+              onSwitchNotebook={handleSwitchNotebook}
+              onCreateAnotherNotebook={handleCreateAnotherNotebook}
+              notebookIndex={notebookIndex}
+            />
+          )}
+        </Suspense>
         {showFooter && (
           <Footer 
             onNavigateAbout={handleNavigateAbout}
