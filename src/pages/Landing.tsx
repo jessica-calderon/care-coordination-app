@@ -15,13 +15,13 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
         </h1>
         
         <p className="text-lg md:text-xl mb-8 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-          A calm place for family caregivers to keep track of daily care and hand off responsibility without stress.
+          A calm, shared notebook for families coordinating daily care — notes, tasks, and handoffs, all in one place.
         </p>
 
         <ul className="space-y-4 mb-10" style={{ color: 'var(--text-secondary)' }} aria-label="Features">
           <li className="flex items-start">
             <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-            <span>Keep daily notes about care, symptoms, and tasks</span>
+            <span>Keep daily notes about care, symptoms, and observations</span>
           </li>
           <li className="flex items-start">
             <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
@@ -29,13 +29,17 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
           </li>
           <li className="flex items-start">
             <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-            <span>Share responsibility with family</span>
+            <span>Hand off responsibility clearly between caregivers</span>
           </li>
           <li className="flex items-start">
             <FontAwesomeIcon icon={Icons.listItem} className="mr-3 opacity-55 mt-0.5" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-            <span>Reduce mental load during handoffs</span>
+            <span>Reduce mental load during care transitions</span>
           </li>
         </ul>
+
+        <p className="text-sm mb-8 leading-relaxed opacity-75" style={{ color: 'var(--text-secondary)' }}>
+          No accounts. No setup. Just a shared care notebook.
+        </p>
 
         <button 
           type="button"
@@ -52,9 +56,9 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = 'var(--button-bg)';
           }}
-          aria-label={hasNotebook ? "Continue care notebook" : "Start a care notebook"}
+          aria-label={hasNotebook ? "Open care notebook" : "Start care notebook"}
         >
-          {hasNotebook ? 'Continue care notebook' : 'Start a care notebook'}
+          {hasNotebook ? 'Open care notebook' : 'Start care notebook'}
         </button>
       </section>
     </main>

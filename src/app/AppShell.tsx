@@ -88,11 +88,12 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
                 '--tw-ring-color': 'var(--focus-ring)',
               } as React.CSSProperties}
               aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
               aria-pressed={theme === 'dark'}
             >
               <FontAwesomeIcon 
                 icon={theme === 'light' ? Icons.moon : Icons.sun} 
-                style={{ fontSize: '1em' }} 
+                style={{ fontSize: '1em', color: 'var(--text-secondary)' }} 
                 aria-hidden="true" 
               />
             </button>

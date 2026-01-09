@@ -12,11 +12,11 @@ import {
   faPenToSquare,
   faFileLines,
   faMoon,
-  faSun,
   faChevronDown,
   faChevronUp,
   faUsers
 } from '@fortawesome/free-solid-svg-icons';
+import { faSun as faSunRegular } from '@fortawesome/free-regular-svg-icons';
 
 export const Icons = {
   note: faNoteSticky,
@@ -32,7 +32,7 @@ export const Icons = {
   quickNote: faPenToSquare, // Pen icon for Quick note section
   careNotes: faFileLines, // Document icon for Care Notes section
   moon: faMoon,
-  sun: faSun,
+  sun: faSunRegular,
   chevronDown: faChevronDown,
   chevronUp: faChevronUp,
   careTeam: faUsers,
