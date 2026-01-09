@@ -46,7 +46,7 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
               <button
                 type="button"
                 onClick={handleBackClick}
-                className="text-base hover:underline focus:outline-none focus:ring-2 rounded px-2 py-1 transition-all cursor-pointer inline-flex items-center hover:-translate-x-0.5"
+                className="text-base focus:outline-none focus:ring-2 rounded px-2 py-1 transition-all cursor-pointer inline-flex items-center hover:-translate-x-0.5 hover:opacity-80"
                 style={{ 
                   color: 'var(--text-secondary)',
                   '--tw-ring-color': 'var(--focus-ring)',
@@ -82,7 +82,7 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
             <button
               type="button"
               onClick={toggleTheme}
-              className="p-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer"
+              className="p-2 rounded-md focus:outline-none focus:ring-2 transition-colors cursor-pointer hover:opacity-80"
               style={{ 
                 color: 'var(--text-secondary)',
                 '--tw-ring-color': 'var(--focus-ring)',
@@ -105,5 +105,4 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
   )
 }
 
-export default AppShell
-
+export default AppShell;

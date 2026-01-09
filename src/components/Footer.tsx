@@ -55,7 +55,7 @@ function Footer({ onNavigateAbout, onNavigateHowItWorks, onNavigatePrivacy }: Fo
                 <a
                   href="#"
                   onClick={handleAboutClick}
-                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-offset-2 rounded px-1 transition-colors"
+                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-offset-2 rounded px-1 transition-colors hover:opacity-80"
                   style={{ 
                     color: 'var(--text-muted)',
                     '--tw-ring-color': 'var(--focus-ring)',
@@ -69,7 +69,7 @@ function Footer({ onNavigateAbout, onNavigateHowItWorks, onNavigatePrivacy }: Fo
                 <a
                   href="#"
                   onClick={handleHowItWorksClick}
-                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-offset-2 rounded px-1 transition-colors"
+                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-offset-2 rounded px-1 transition-colors hover:opacity-80"
                   style={{ 
                     color: 'var(--text-muted)',
                     '--tw-ring-color': 'var(--focus-ring)',
@@ -83,7 +83,7 @@ function Footer({ onNavigateAbout, onNavigateHowItWorks, onNavigatePrivacy }: Fo
                 <a
                   href="#"
                   onClick={handlePrivacyClick}
-                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-offset-2 rounded px-1 transition-colors"
+                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-offset-2 rounded px-1 transition-colors hover:opacity-80"
                   style={{ 
                     color: 'var(--text-muted)',
                     '--tw-ring-color': 'var(--focus-ring)',

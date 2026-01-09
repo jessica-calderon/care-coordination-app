@@ -1,16 +1,15 @@
 /**
  * Firebase/Firestore implementation of DataAdapter.
  * 
- * This adapter is prepared for Firebase persistence but currently stubs all methods
- * to return reasonable defaults. No Firestore reads or writes are performed yet.
- * 
- * This allows the adapter to be instantiated and integrated without changing
- * existing behavior, preparing for future Firebase implementation.
+ * This adapter reads from Firestore when data is available, and returns null
+ * when no data exists (allowing fallback to localStorage).
  */
 
 import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 import { firestore } from '../firebase/config';
+import { getTodayDateKey } from '../domain/notebook';
+import { doc, getDoc } from 'firebase/firestore';
 import { todayData } from '../mock/todayData';
 
 export class FirebaseAdapter implements DataAdapter {
@@ -22,26 +21,61 @@ export class FirebaseAdapter implements DataAdapter {
    */
   constructor(notebookId: string) {
     this.notebookId = notebookId;
-    // Firestore is imported but not used yet
-    // This ensures the import is valid and the adapter can be instantiated
-    // notebookId is stored for future use when implementing Firestore operations
-    void firestore;
-    void this.notebookId;
   }
 
   /**
    * Load today's complete state (notes, tasks, current caregiver, last updated by)
-   * Stub: Returns empty state with defaults from mock data
+   * Attempts to read from Firestore at /notebooks/{notebookId}/today/{dateKey}
+   * Returns null if document does not exist (allowing fallback to localStorage)
+   * 
+   * This method can return null for fallback scenarios.
+   * Use HybridAdapter for automatic fallback behavior.
+   */
+  async loadTodayInternal(): Promise<TodayState | null> {
+    try {
+      const dateKey = getTodayDateKey();
+      const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        // Document does not exist - return null to allow fallback
+        return null;
+      }
+      
+      const data = docSnap.data();
+      
+      // Parse and return TodayState from Firestore document
+      // Document structure matches TodayState interface
+      return {
+        careNotes: data.careNotes || [],
+        tasks: data.tasks || [],
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || '',
+        caretakers: data.caretakers || []
+      };
+    } catch (error) {
+      // On any error, return null to allow fallback to localStorage
+      // This ensures the app continues to work even if Firestore is unavailable
+      if (import.meta.env.DEV) {
+        console.warn('Firestore read error, falling back to localStorage:', error);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Load today's complete state (notes, tasks, current caregiver, last updated by)
+   * Implements DataAdapter interface - delegates to loadTodayInternal() but throws
+   * if null is returned (should not happen when used through HybridAdapter)
    */
   async loadToday(): Promise<TodayState> {
-    // TODO: Implement Firestore read
-    return {
-      careNotes: [],
-      tasks: todayData.tasks,
-      currentCaregiver: todayData.currentCaregiver,
-      lastUpdatedBy: todayData.lastUpdatedBy,
-      caretakers: []
-    };
+    const result = await this.loadTodayInternal();
+    if (result === null) {
+      // This should not happen when used through HybridAdapter
+      // But we need to satisfy the interface
+      throw new Error('No data found in Firestore');
+    }
+    return result;
   }
 
   /**

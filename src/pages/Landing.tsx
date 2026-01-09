@@ -44,7 +44,7 @@ function Landing({ onStartNotebook, hasNotebook }: LandingProps) {
         <button 
           type="button"
           onClick={onStartNotebook}
-          className="px-6 py-3 rounded-md text-base font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer"
+          className="px-6 py-3 rounded-md text-base font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer hover:opacity-80"
           style={{ 
             backgroundColor: 'var(--button-bg)',
             color: 'var(--button-text)',

@@ -139,7 +139,7 @@ function CareTeam() {
                         <button
                           type="button"
                           onClick={() => handleSetPrimaryCaretaker(caretaker.name)}
-                          className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                          className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                           style={{ 
                             color: 'var(--text-secondary)',
                             backgroundColor: 'transparent',
@@ -154,7 +154,7 @@ function CareTeam() {
                         <button
                           type="button"
                           onClick={() => handleArchiveCaretaker(caretaker.name)}
-                          className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                          className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                           style={{ 
                             color: 'var(--text-secondary)',
                             backgroundColor: 'transparent',
@@ -201,7 +201,7 @@ function CareTeam() {
                     <button
                       type="button"
                       onClick={() => handleRestoreCaretaker(caretaker.name)}
-                      className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                      className="text-sm px-3 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                       style={{ 
                         color: 'var(--text-secondary)',
                         backgroundColor: 'transparent',
@@ -247,7 +247,7 @@ function CareTeam() {
             />
             <button
               type="submit"
-              className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+              className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
               style={{ 
                 color: 'var(--button-secondary-text)',
                 backgroundColor: 'var(--button-secondary-bg)',

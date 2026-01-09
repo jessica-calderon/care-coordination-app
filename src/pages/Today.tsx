@@ -261,7 +261,7 @@ function Today() {
             />
             <button
               type="submit"
-              className="w-full sm:w-auto px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
               style={{ 
                 color: 'var(--button-secondary-text)',
                 backgroundColor: 'var(--button-secondary-bg)',
@@ -285,7 +285,7 @@ function Today() {
           <button
             type="button"
             onClick={() => setIsCareNotesExpanded(!isCareNotesExpanded)}
-            className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2"
+            className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2 hover:opacity-80 transition-opacity"
             style={{ 
               '--tw-ring-color': 'var(--focus-ring)',
             } as React.CSSProperties}
@@ -373,7 +373,7 @@ function Today() {
                               <button
                                 type="button"
                                 onClick={() => handleSaveEdit(index)}
-                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                                 style={{ 
                                   color: 'var(--button-secondary-text)',
                                   backgroundColor: 'var(--button-secondary-bg)',
@@ -392,7 +392,7 @@ function Today() {
                               <button
                                 type="button"
                                 onClick={handleCancelEdit}
-                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                                 style={{ 
                                   color: 'var(--text-secondary)',
                                   backgroundColor: 'transparent',
@@ -417,7 +417,7 @@ function Today() {
                                 <button
                                   type="button"
                                   onClick={() => handleStartEdit(index)}
-                                  className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer flex-shrink-0"
+                                  className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer flex-shrink-0 hover:opacity-80"
                                   style={{ 
                                     color: 'var(--text-secondary)',
                                     backgroundColor: 'transparent',
@@ -524,7 +524,7 @@ function Today() {
                   <button
                     type="button"
                     onClick={handleHandoff}
-                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                     style={{ 
                       color: 'var(--button-secondary-text)',
                       backgroundColor: 'var(--button-secondary-bg)',
@@ -551,7 +551,7 @@ function Today() {
                   <button
                     type="button"
                     onClick={handleHandoff}
-                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                     style={{ 
                       color: 'var(--button-secondary-text)',
                       backgroundColor: 'var(--button-secondary-bg)',
@@ -600,7 +600,7 @@ function Today() {
                     <button
                       type="button"
                       onClick={handleHandoff}
-                      className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                      className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
                       style={{ 
                         color: 'var(--button-secondary-text)',
                         backgroundColor: 'var(--button-secondary-bg)',
@@ -634,7 +634,7 @@ function Today() {
               <button
                 type="button"
                 onClick={() => setIsEarlierExpanded(!isEarlierExpanded)}
-                className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2"
+                className="w-full flex items-center justify-between text-left mb-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2 hover:opacity-80 transition-opacity"
                 style={{ 
                   '--tw-ring-color': 'var(--focus-ring)',
                 } as React.CSSProperties}
