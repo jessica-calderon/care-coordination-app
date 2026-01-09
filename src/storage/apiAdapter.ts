@@ -8,7 +8,7 @@
  */
 
 import type { DataAdapter } from './DataAdapter';
-import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker, Task } from '../domain/types';
 
 /**
  * Base API URL - can be configured via environment variable in the future
@@ -88,10 +88,47 @@ export class ApiAdapter implements DataAdapter {
   /**
    * Toggle task completion status
    */
-  async toggleTask(taskId: string, completed: boolean): Promise<void> {
+  async toggleTask(taskId: string): Promise<void> {
+    // Read current state to get the task's current completed status
+    const todayState = await this.loadToday();
+    const task = todayState.tasks.find(t => t.id === taskId);
+    if (!task) {
+      // Task not found - silently return
+      return;
+    }
+    // Toggle and send the new completed status
     await apiRequest<void>(`/tasks/${taskId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ completed }),
+      body: JSON.stringify({ completed: !task.completed }),
+    });
+  }
+
+  /**
+   * Add a new task
+   */
+  async addTask(text: string): Promise<Task> {
+    return apiRequest<Task>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  /**
+   * Update an existing task
+   */
+  async updateTask(taskId: string, newText: string): Promise<Task> {
+    return apiRequest<Task>(`/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ text: newText }),
+    });
+  }
+
+  /**
+   * Delete an existing task
+   */
+  async deleteTask(taskId: string): Promise<void> {
+    await apiRequest<void>(`/tasks/${taskId}`, {
+      method: 'DELETE',
     });
   }
 

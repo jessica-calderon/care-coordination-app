@@ -6,11 +6,10 @@
  */
 
 import type { DataAdapter } from './DataAdapter';
-import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker, Task } from '../domain/types';
 import { firestore } from '../firebase/config';
-import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCareeNameChangedNote, createCaretakerNameChangedNote, createNoteDeletedNote } from '../domain/notebook';
+import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCareeNameChangedNote, createCaretakerNameChangedNote, createNoteDeletedNote, createTaskAddedNote, createTaskCompletedNote, createTaskUncompletedNote, createTaskUpdatedNote, createTaskDeletedNote } from '../domain/notebook';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
-import { todayData } from '../mock/todayData';
 import { nanoid } from 'nanoid';
 
 /**
@@ -340,9 +339,16 @@ export class FirebaseAdapter implements DataAdapter {
         }
       }
 
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (existingData?.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
+      
       const hydrated: TodayState = {
         careNotes: existingData?.careNotes ?? [],
-        tasks: existingData?.tasks ?? todayData.tasks ?? [],
+        tasks: tasks,
         currentCaregiver: currentCaregiver,
         lastUpdatedBy: existingData?.lastUpdatedBy ?? currentCaregiver
       };
@@ -355,15 +361,22 @@ export class FirebaseAdapter implements DataAdapter {
       if (needsUpdate) {
         try {
           await this.withRetry(async () => {
-            await setDoc(
-              todayRef,
-              {
-                ...hydrated,
-                createdAt: (existingData as any)?.createdAt ?? Timestamp.now(),
-                version: 1
-              },
-              { merge: true } // IMPORTANT: never wipe existing data
-            );
+            // When merging, explicitly preserve tasks and careNotes from existing data if they exist
+            const updateData: any = {
+              currentCaregiver: hydrated.currentCaregiver,
+              lastUpdatedBy: hydrated.lastUpdatedBy,
+              createdAt: (existingData as any)?.createdAt ?? Timestamp.now(),
+              version: 1
+            };
+            
+            // Only update tasks/careNotes if they don't exist in Firestore (new document)
+            // Otherwise preserve what's already there
+            if (!existingData) {
+              updateData.tasks = hydrated.tasks;
+              updateData.careNotes = hydrated.careNotes;
+            }
+            
+            await setDoc(todayRef, updateData, { merge: true });
           });
         } catch (error: any) {
           // If quota error persists after retries, log and return existing data or hydrated state
@@ -387,9 +400,16 @@ export class FirebaseAdapter implements DataAdapter {
     }
 
     // No caretakers and no existing caregiver - create empty state
+    // Ensure tasks have completed field (default to false if missing)
+    const tasks = (existingData?.tasks || []).map((task: any) => ({
+      id: task.id,
+      text: task.text,
+      completed: task.completed !== undefined ? task.completed : false
+    }));
+    
     const hydrated: TodayState = {
       careNotes: existingData?.careNotes ?? [],
-      tasks: existingData?.tasks ?? todayData.tasks ?? [],
+      tasks: tasks,
       currentCaregiver: '',
       lastUpdatedBy: ''
     };
@@ -477,16 +497,22 @@ export class FirebaseAdapter implements DataAdapter {
       const primaryCaretaker = await this.getPrimaryCaretakerName();
       todayState = {
         careNotes: [],
-        tasks: todayData.tasks || [],
+        tasks: [],
         currentCaregiver: primaryCaretaker,
         lastUpdatedBy: primaryCaretaker
       };
     } else {
       // Document exists - use existing data
       const data = docSnap.data();
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (data.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
       todayState = {
         careNotes: data.careNotes || [],
-        tasks: data.tasks || todayData.tasks || [],
+        tasks: tasks,
         currentCaregiver: data.currentCaregiver || '',
         lastUpdatedBy: data.lastUpdatedBy || ''
       };
@@ -537,7 +563,7 @@ export class FirebaseAdapter implements DataAdapter {
       const data = docSnap.data();
       todayState = {
         careNotes: data.careNotes || [],
-        tasks: data.tasks || todayData.tasks || [],
+        tasks: data.tasks || [],
         currentCaregiver: data.currentCaregiver || '',
         lastUpdatedBy: data.lastUpdatedBy || ''
       };
@@ -589,7 +615,7 @@ export class FirebaseAdapter implements DataAdapter {
       const data = docSnap.data();
       todayState = {
         careNotes: data.careNotes || [],
-        tasks: data.tasks || todayData.tasks || [],
+        tasks: data.tasks || [],
         currentCaregiver: data.currentCaregiver || '',
         lastUpdatedBy: data.lastUpdatedBy || ''
       };
@@ -627,11 +653,309 @@ export class FirebaseAdapter implements DataAdapter {
 
   /**
    * Toggle task completion status
-   * Stub: No-op
+   * Reads current TodayState from Firestore, toggles the task's completed status, and writes back.
    */
-  async toggleTask(_taskId: string, _completed: boolean): Promise<void> {
+  async toggleTask(taskId: string): Promise<void> {
     await this.ensureNotebookInitialized();
-    // TODO: Implement Firestore update
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore with retry logic
+    const docSnap = await this.withRetry(async () => {
+      return await getDoc(docRef);
+    });
+    
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      // Document doesn't exist - initialize with defaults
+      const primaryCaretaker = await this.getPrimaryCaretakerName();
+      todayState = {
+        careNotes: [],
+        tasks: [],
+        currentCaregiver: primaryCaretaker,
+        lastUpdatedBy: primaryCaretaker
+      };
+    } else {
+      // Document exists - use existing data
+      const data = docSnap.data();
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (data.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: tasks,
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || ''
+      };
+    }
+    
+    // Find the task and toggle its completed status
+    const taskIndex = todayState.tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) {
+      // Task not found - silently return (task may have been deleted)
+      return;
+    }
+    
+    const task = todayState.tasks[taskIndex];
+    const wasCompleted = task.completed;
+    
+    // Toggle the completed status
+    const updatedTasks = [...todayState.tasks];
+    updatedTasks[taskIndex] = {
+      ...updatedTasks[taskIndex],
+      completed: !wasCompleted
+    };
+    
+    // Create system note for task completion/uncompletion
+    const currentCaregiver = todayState.currentCaregiver;
+    const taskNote = wasCompleted 
+      ? createTaskUncompletedNote(currentCaregiver, task.text)
+      : createTaskCompletedNote(currentCaregiver, task.text);
+    
+    // Prepend system note to careNotes
+    const updatedCareNotes = [taskNote, ...todayState.careNotes];
+    
+    // Update TodayState with toggled task and system note
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      tasks: updatedTasks,
+      careNotes: updatedCareNotes,
+      lastUpdatedBy: currentCaregiver
+    };
+    
+    // Write updated TodayState to Firestore using merge: true with retry logic
+    await this.withRetry(async () => {
+      await setDoc(docRef, updatedTodayState, { merge: true });
+    });
+  }
+
+  /**
+   * Add a new task
+   * Reads current TodayState from Firestore, adds the task, and writes back.
+   */
+  async addTask(text: string): Promise<Task> {
+    await this.ensureNotebookInitialized();
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore with retry logic
+    const docSnap = await this.withRetry(async () => {
+      return await getDoc(docRef);
+    });
+    
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      // Document doesn't exist - initialize with defaults
+      const primaryCaretaker = await this.getPrimaryCaretakerName();
+      todayState = {
+        careNotes: [],
+        tasks: [],
+        currentCaregiver: primaryCaretaker,
+        lastUpdatedBy: primaryCaretaker
+      };
+    } else {
+      // Document exists - use existing data
+      const data = docSnap.data();
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (data.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: tasks,
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || ''
+      };
+    }
+    
+    // Create new task
+    const newTask: Task = {
+      id: nanoid(),
+      text: text.trim(),
+      completed: false
+    };
+    
+    // Add task to the beginning of tasks array
+    const updatedTasks = [newTask, ...todayState.tasks];
+    
+    // Create system note for task added
+    const currentCaregiver = todayState.currentCaregiver;
+    const taskAddedNote = createTaskAddedNote(currentCaregiver, newTask.text);
+    
+    // Prepend system note to careNotes
+    const updatedCareNotes = [taskAddedNote, ...todayState.careNotes];
+    
+    // Update TodayState with new task and system note
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      tasks: updatedTasks,
+      careNotes: updatedCareNotes,
+      lastUpdatedBy: currentCaregiver
+    };
+    
+    // Write updated TodayState to Firestore using merge: true with retry logic
+    await this.withRetry(async () => {
+      await setDoc(docRef, updatedTodayState, { merge: true });
+    });
+    
+    return newTask;
+  }
+
+  /**
+   * Update an existing task
+   * Reads current TodayState from Firestore, updates the task, and writes back.
+   */
+  async updateTask(taskId: string, newText: string): Promise<Task> {
+    await this.ensureNotebookInitialized();
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore with retry logic
+    const docSnap = await this.withRetry(async () => {
+      return await getDoc(docRef);
+    });
+    
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      // Document doesn't exist - initialize with defaults
+      const primaryCaretaker = await this.getPrimaryCaretakerName();
+      todayState = {
+        careNotes: [],
+        tasks: [],
+        currentCaregiver: primaryCaretaker,
+        lastUpdatedBy: primaryCaretaker
+      };
+    } else {
+      // Document exists - use existing data
+      const data = docSnap.data();
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (data.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: tasks,
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || ''
+      };
+    }
+    
+    // Find the task and update its text
+    const taskIndex = todayState.tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) {
+      throw new Error('Task not found');
+    }
+    
+    const oldTask = todayState.tasks[taskIndex];
+    const oldText = oldTask.text;
+    const newTextTrimmed = newText.trim();
+    
+    // Update the task text
+    const updatedTasks = [...todayState.tasks];
+    updatedTasks[taskIndex] = {
+      ...updatedTasks[taskIndex],
+      text: newTextTrimmed
+    };
+    
+    // Create system note for task updated
+    const currentCaregiver = todayState.currentCaregiver;
+    const taskUpdatedNote = createTaskUpdatedNote(currentCaregiver, oldText, newTextTrimmed);
+    
+    // Prepend system note to careNotes
+    const updatedCareNotes = [taskUpdatedNote, ...todayState.careNotes];
+    
+    // Update TodayState with updated task and system note
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      tasks: updatedTasks,
+      careNotes: updatedCareNotes,
+      lastUpdatedBy: currentCaregiver
+    };
+    
+    // Write updated TodayState to Firestore using merge: true with retry logic
+    await this.withRetry(async () => {
+      await setDoc(docRef, updatedTodayState, { merge: true });
+    });
+    
+    return updatedTasks[taskIndex];
+  }
+
+  /**
+   * Delete an existing task
+   * Reads current TodayState from Firestore, removes the task, and writes back.
+   */
+  async deleteTask(taskId: string): Promise<void> {
+    await this.ensureNotebookInitialized();
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore with retry logic
+    const docSnap = await this.withRetry(async () => {
+      return await getDoc(docRef);
+    });
+    
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      // Document doesn't exist - nothing to delete
+      return;
+    } else {
+      // Document exists - use existing data
+      const data = docSnap.data();
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (data.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: tasks,
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || ''
+      };
+    }
+    
+    // Find the task before removing it (for system note)
+    const taskToDelete = todayState.tasks.find(t => t.id === taskId);
+    
+    // Remove the task
+    const updatedTasks = todayState.tasks.filter(t => t.id !== taskId);
+    
+    // If task wasn't found, silently return
+    if (updatedTasks.length === todayState.tasks.length) {
+      return;
+    }
+    
+    // Create system note for task deleted
+    const currentCaregiver = todayState.currentCaregiver;
+    const taskDeletedNote = createTaskDeletedNote(currentCaregiver, taskToDelete!.text);
+    
+    // Prepend system note to careNotes
+    const updatedCareNotes = [taskDeletedNote, ...todayState.careNotes];
+    
+    // Update TodayState with task removed and system note
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      tasks: updatedTasks,
+      careNotes: updatedCareNotes,
+      lastUpdatedBy: currentCaregiver
+    };
+    
+    // Write updated TodayState to Firestore using merge: true with retry logic
+    await this.withRetry(async () => {
+      await setDoc(docRef, updatedTodayState, { merge: true });
+    });
   }
 
   /**
@@ -652,16 +976,22 @@ export class FirebaseAdapter implements DataAdapter {
       const primaryCaretaker = await this.getPrimaryCaretakerName();
       todayState = {
         careNotes: [],
-        tasks: todayData.tasks || [],
+        tasks: [],
         currentCaregiver: primaryCaretaker,
         lastUpdatedBy: primaryCaretaker
       };
     } else {
       // Document exists - use existing data
       const data = docSnap.data();
+      // Ensure tasks have completed field (default to false if missing)
+      const tasks = (data.tasks || []).map((task: any) => ({
+        id: task.id,
+        text: task.text,
+        completed: task.completed !== undefined ? task.completed : false
+      }));
       todayState = {
         careNotes: data.careNotes || [],
-        tasks: data.tasks || todayData.tasks || [],
+        tasks: tasks,
         currentCaregiver: data.currentCaregiver || '',
         lastUpdatedBy: data.lastUpdatedBy || ''
       };

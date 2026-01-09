@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { todayData } from '../mock/todayData';
-import type { CareNote, NotesByDate, Caretaker } from '../domain/types';
+import type { CareNote, NotesByDate, Caretaker, Task } from '../domain/types';
 import { getTodayDateKey, canEditNote, canDeleteNote } from '../domain/notebook';
 import { useDataAdapter } from '../storage/DataAdapterContext';
 import { createFirebaseAdapter } from '../storage';
@@ -15,6 +14,7 @@ function Today() {
   const dataAdapter = useDataAdapter();
   const [notesByDate, setNotesByDate] = useState<NotesByDate>({});
   const [careNotes, setCareNotes] = useState<CareNote[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [noteText, setNoteText] = useState('');
   const [lastUpdatedBy, setLastUpdatedBy] = useState('');
   const [currentCaregiver, setCurrentCaregiver] = useState('');
@@ -22,13 +22,20 @@ function Today() {
   const [selectedHandoffTarget, setSelectedHandoffTarget] = useState<string>('');
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
-  const [isCareNotesExpanded, setIsCareNotesExpanded] = useState(false);
-  const [isEarlierExpanded, setIsEarlierExpanded] = useState(false);
+  const [isCareNotesExpanded, setIsCareNotesExpanded] = useState(true);
+  const [isEarlierExpanded, setIsEarlierExpanded] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isHandingOff, setIsHandingOff] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState<number | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState<number | null>(null);
+  const [taskText, setTaskText] = useState('');
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskText, setEditingTaskText] = useState('');
+  const [isSavingTaskEdit, setIsSavingTaskEdit] = useState<string | null>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null);
+  const [isTogglingTask, setIsTogglingTask] = useState<string | null>(null);
   const [careeName, setCareeName] = useState<string>('Care recipient');
   const [showEditCareeNameModal, setShowEditCareeNameModal] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set()); // Track which days are expanded
@@ -51,6 +58,7 @@ function Today() {
       }
       const todayState = await dataAdapter.loadToday();
       setCareNotes(todayState.careNotes);
+      setTasks(todayState.tasks);
       setCurrentCaregiver(todayState.currentCaregiver);
       setLastUpdatedBy(todayState.lastUpdatedBy);
       
@@ -143,6 +151,22 @@ function Today() {
     };
   }, [loadState]);
 
+  // Periodic refresh to catch changes from other users/devices (every 30 seconds)
+  useEffect(() => {
+    if (!hasLoadedRef.current) {
+      return; // Don't start periodic refresh until initial load is complete
+    }
+
+    const interval = setInterval(() => {
+      // Only refresh if page is visible
+      if (document.visibilityState === 'visible') {
+        loadState();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [loadState]);
+
   // Check for date change on mount and periodically
   useEffect(() => {
     const checkDate = async () => {
@@ -154,6 +178,7 @@ function Today() {
           // Date changed - reload state from adapter
           const todayState = await dataAdapter.loadToday();
           setCareNotes(todayState.careNotes);
+          setTasks(todayState.tasks);
           setCurrentCaregiver(todayState.currentCaregiver);
           setLastUpdatedBy(todayState.lastUpdatedBy);
           
@@ -356,6 +381,7 @@ function Today() {
       // Reload state from adapter
       const todayState = await dataAdapter.loadToday();
       setCareNotes(todayState.careNotes);
+      setTasks(todayState.tasks);
       setCurrentCaregiver(todayState.currentCaregiver);
       setLastUpdatedBy(todayState.lastUpdatedBy);
       
@@ -469,6 +495,111 @@ function Today() {
     }
   };
 
+  const handleAddTask = async () => {
+    if (taskText.trim() && !isAddingTask) {
+      try {
+        setIsAddingTask(true);
+        // Use adapter to add task
+        const newTask = await dataAdapter.addTask(taskText.trim());
+        
+        // Update UI state
+        setTasks([newTask, ...tasks]);
+        setTaskText('');
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Show error message to user
+        let errorMessage = 'Failed to add task. Please try again.';
+        if (error instanceof Error) {
+          // Check for quota/resource-exhausted errors
+          if (error.message.includes('quota') || error.message.includes('resource-exhausted') || 
+              (error as any)?.code === 'resource-exhausted') {
+            errorMessage = 'Unable to add task: Firebase quota exceeded. Please try again later or contact support.';
+          } else {
+            errorMessage = error.message || errorMessage;
+          }
+        }
+        alert(errorMessage);
+      } finally {
+        setIsAddingTask(false);
+      }
+    }
+  };
+
+  const handleStartEditTask = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      setEditingTaskId(taskId);
+      setEditingTaskText(task.text);
+    }
+  };
+
+  const handleCancelEditTask = () => {
+    setEditingTaskId(null);
+    setEditingTaskText('');
+  };
+
+  const handleSaveTaskEdit = async (taskId: string) => {
+    if (editingTaskText.trim() && isSavingTaskEdit !== taskId) {
+      try {
+        setIsSavingTaskEdit(taskId);
+        // Use adapter to update task
+        const updatedTask = await dataAdapter.updateTask(taskId, editingTaskText.trim());
+        
+        // Update UI state
+        setTasks(tasks.map(t => t.id === taskId ? updatedTask : t));
+        
+        // Clear editing state
+        setIsSavingTaskEdit(null);
+        setEditingTaskId(null);
+        setEditingTaskText('');
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          setIsSavingTaskEdit(null);
+          return;
+        }
+        // Show error message to user
+        let errorMessage = 'Failed to save task. Please try again.';
+        if (error instanceof Error) {
+          // Check for quota/resource-exhausted errors
+          if (error.message.includes('quota') || error.message.includes('resource-exhausted') || 
+              (error as any)?.code === 'resource-exhausted') {
+            errorMessage = 'Unable to save task: Firebase quota exceeded. Please try again later or contact support.';
+          } else {
+            errorMessage = error.message || errorMessage;
+          }
+        }
+        alert(errorMessage);
+        // Clear saving state on error
+        setIsSavingTaskEdit(null);
+      }
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (isDeletingTask !== taskId) {
+      try {
+        setIsDeletingTask(taskId);
+        // Use adapter to delete task
+        await dataAdapter.deleteTask(taskId);
+        
+        // Update UI state - remove the task
+        setTasks(tasks.filter(t => t.id !== taskId));
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Other errors are handled by global error handler
+      } finally {
+        setIsDeletingTask(null);
+      }
+    }
+  };
+
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <div className="px-6 py-8 max-w-2xl mx-auto">
@@ -510,7 +641,7 @@ function Today() {
         </header>
 
         {/* First-Time Context */}
-        {careNotes.length === 0 && todayData.tasks.length === 0 && (
+        {careNotes.length === 0 && tasks.length === 0 && (
           <section className="mb-8">
             <p className="text-base leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               This is today's shared care notebook. Add notes as things happen, and they'll be here for everyone helping care for {careeName}.
@@ -833,47 +964,265 @@ function Today() {
             <FontAwesomeIcon icon={Icons.tasks} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             What matters next
           </h2>
-          {todayData.tasks.length === 0 ? (
-            <div className="py-2" role="status">
-              <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
-                No upcoming tasks added yet.
-              </p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                You can add reminders here when something needs follow-up.
-              </p>
+          
+          {/* Add Task Form */}
+          <form 
+            className="mb-6 space-y-3" 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddTask();
+            }}
+            aria-label="Add a task"
+          >
+            <label htmlFor="task-input" className="sr-only">
+              Task text
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="task-input"
+                type="text"
+                value={taskText}
+                onChange={(e) => setTaskText(e.target.value)}
+                placeholder="Add a task or reminder…"
+                className="flex-1 px-4 py-3 text-base rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent"
+                style={{ 
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: 'var(--border-color)',
+                  '--tw-ring-color': 'var(--focus-ring)',
+                } as React.CSSProperties}
+                aria-label="Add a task or reminder"
+              />
+              <button
+                type="submit"
+                disabled={isAddingTask || !taskText.trim()}
+                className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                style={{ 
+                  color: 'var(--button-secondary-text)',
+                  backgroundColor: 'var(--button-secondary-bg)',
+                  '--tw-ring-color': 'var(--focus-ring)',
+                } as React.CSSProperties}
+                onMouseEnter={(e) => {
+                  if (!isAddingTask && taskText.trim()) {
+                    e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                }}
+                aria-label="Add task"
+              >
+                {isAddingTask && <InlineSpinner size="sm" />}
+                Add
+              </button>
             </div>
-          ) : (
-            <ul className="space-y-3" role="list" aria-label="Upcoming tasks">
-              {todayData.tasks.map((task) => (
+          </form>
+
+          {(() => {
+            const incompleteTasks = tasks.filter(t => !t.completed);
+            const completedTasks = tasks.filter(t => t.completed);
+
+            const renderTaskItem = (task: Task) => {
+              const isEditing = editingTaskId === task.id;
+              return (
                 <li key={task.id} className="flex items-start gap-3" role="listitem">
-                  <input
-                    type="checkbox"
-                    id={task.id}
-                    checked={task.completed}
-                    readOnly
-                    className="mt-1 w-5 h-5 rounded focus:ring-2 focus:ring-offset-2 cursor-pointer"
-                    style={{ 
-                      accentColor: 'var(--text-primary)',
-                      borderColor: 'var(--border-color)',
-                      '--tw-ring-color': 'var(--text-primary)',
-                    } as React.CSSProperties}
-                    aria-label={`${task.text}, ${task.completed ? 'completed' : 'not completed'}`}
-                    aria-checked={task.completed}
-                  />
-                  <label
-                    htmlFor={task.id}
-                    className="text-base leading-relaxed flex-1 cursor-pointer"
-                    style={{ 
-                      color: task.completed ? 'var(--text-light)' : 'var(--text-primary)',
-                      textDecoration: task.completed ? 'line-through' : 'none'
-                    }}
-                  >
-                    {task.text}
-                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      type="checkbox"
+                      id={task.id}
+                      checked={task.completed}
+                      onChange={async () => {
+                        if (isTogglingTask === task.id) return; // Prevent double-clicks
+                        const taskId = task.id; // Capture task ID before async operations
+                        try {
+                          setIsTogglingTask(taskId);
+                          await dataAdapter.toggleTask(taskId);
+                          // Reload state to ensure we have the latest from Firestore
+                          const todayState = await dataAdapter.loadToday();
+                          setTasks(todayState.tasks);
+                          // Clear loading state after a brief delay to ensure React has processed the update
+                          setTimeout(() => {
+                            setIsTogglingTask(null);
+                          }, 100);
+                        } catch (error) {
+                          // Silently handle AbortError - request was cancelled
+                          if (error instanceof Error && error.name === 'AbortError') {
+                            setIsTogglingTask(null);
+                            return;
+                          }
+                          // On error, reload state to revert optimistic update
+                          const todayState = await dataAdapter.loadToday();
+                          setTasks(todayState.tasks);
+                          // Clear loading state after error handling
+                          setTimeout(() => {
+                            setIsTogglingTask(null);
+                          }, 100);
+                        }
+                      }}
+                      className="w-5 h-5 rounded focus:ring-2 focus:ring-offset-2 cursor-pointer"
+                      style={{ 
+                        accentColor: 'var(--text-primary)',
+                        borderColor: 'var(--border-color)',
+                        '--tw-ring-color': 'var(--text-primary)',
+                        opacity: isTogglingTask === task.id ? 0.5 : 1,
+                      } as React.CSSProperties}
+                      aria-label={`${task.text}, ${task.completed ? 'completed' : 'not completed'}`}
+                      aria-checked={task.completed}
+                      disabled={isEditing || isTogglingTask === task.id}
+                    />
+                    {isTogglingTask === task.id && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <InlineSpinner size="sm" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editingTaskText}
+                          onChange={(e) => setEditingTaskText(e.target.value)}
+                          className="w-full px-4 py-2 text-base rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent"
+                          style={{ 
+                            color: 'var(--text-primary)',
+                            backgroundColor: 'var(--bg-primary)',
+                            borderColor: 'var(--border-color)',
+                            '--tw-ring-color': 'var(--focus-ring)',
+                          } as React.CSSProperties}
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveTaskEdit(task.id)}
+                            disabled={isSavingTaskEdit === task.id}
+                            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                            style={{ 
+                              color: 'var(--button-secondary-text)',
+                              backgroundColor: 'var(--button-secondary-bg)',
+                              '--tw-ring-color': 'var(--focus-ring)',
+                            } as React.CSSProperties}
+                            onMouseEnter={(e) => {
+                              if (isSavingTaskEdit !== task.id) {
+                                e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+                            }}
+                            aria-label="Save edited task"
+                          >
+                            {isSavingTaskEdit === task.id && <InlineSpinner size="sm" />}
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditTask}
+                            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+                            style={{ 
+                              color: 'var(--text-secondary)',
+                              backgroundColor: 'transparent',
+                              '--tw-ring-color': 'var(--focus-ring)',
+                            } as React.CSSProperties}
+                            aria-label="Cancel editing"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        <label
+                          htmlFor={task.id}
+                          className="text-base leading-relaxed flex-1 cursor-pointer"
+                          style={{ 
+                            color: task.completed ? 'var(--text-light)' : 'var(--text-primary)',
+                            textDecoration: task.completed ? 'line-through' : 'none'
+                          }}
+                        >
+                          {task.text}
+                        </label>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditTask(task.id)}
+                            className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+                            style={{ 
+                              color: 'var(--text-secondary)',
+                              backgroundColor: 'transparent',
+                              '--tw-ring-color': 'var(--focus-ring)',
+                            } as React.CSSProperties}
+                            aria-label="Edit task"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTask(task.id)}
+                            disabled={isDeletingTask === task.id}
+                            className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                            style={{ 
+                              color: 'var(--text-secondary)',
+                              backgroundColor: 'transparent',
+                              '--tw-ring-color': 'var(--focus-ring)',
+                            } as React.CSSProperties}
+                            aria-label="Delete task"
+                          >
+                            {isDeletingTask === task.id ? (
+                              <>
+                                <InlineSpinner size="sm" />
+                                <span className="sr-only">Deleting...</span>
+                              </>
+                            ) : (
+                              'Delete'
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </li>
-              ))}
-            </ul>
-          )}
+              );
+            };
+
+            return (
+              <>
+                {/* Incomplete Tasks Section */}
+                {incompleteTasks.length > 0 ? (
+                  <div className="mb-8">
+                    <h3 className="text-lg font-normal mb-3" style={{ color: 'var(--text-secondary)' }}>
+                      To do
+                    </h3>
+                    <ul className="space-y-3" role="list" aria-label="Tasks to do">
+                      {incompleteTasks.map(renderTaskItem)}
+                    </ul>
+                  </div>
+                ) : tasks.length === 0 ? (
+                  <div className="py-2" role="status">
+                    <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                      No upcoming tasks added yet.
+                    </p>
+                    <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                      Use the form above to add reminders for follow-up care, medications, appointments, or anything that needs to happen next.
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Completed Tasks Section */}
+                {completedTasks.length > 0 && (
+                  <div className="border-t pt-6" style={{ borderColor: 'var(--border-color)' }}>
+                    <h3 className="text-lg font-normal mb-3" style={{ color: 'var(--text-secondary)' }}>
+                      Complete
+                    </h3>
+                    <ul className="space-y-3" role="list" aria-label="Completed tasks">
+                      {completedTasks.map(renderTaskItem)}
+                    </ul>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </section>
 
         {/* Handoff Section */}

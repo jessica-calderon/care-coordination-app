@@ -4,7 +4,7 @@
  * Implementations can use localStorage, API, or any other persistence mechanism.
  */
 
-import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker, Task } from '../domain/types';
 
 export interface DataAdapter {
   /**
@@ -36,9 +36,29 @@ export interface DataAdapter {
   /**
    * Toggle task completion status
    * @param taskId The ID of the task to toggle
-   * @param completed The new completion status
    */
-  toggleTask(taskId: string, completed: boolean): Promise<void>;
+  toggleTask(taskId: string): Promise<void>;
+
+  /**
+   * Add a new task
+   * @param text The text content of the task
+   * @returns The created task with id and completed status populated
+   */
+  addTask(text: string): Promise<Task>;
+
+  /**
+   * Update an existing task
+   * @param taskId The ID of the task to update
+   * @param newText The updated text content of the task
+   * @returns The updated task
+   */
+  updateTask(taskId: string, newText: string): Promise<Task>;
+
+  /**
+   * Delete an existing task
+   * @param taskId The ID of the task to delete
+   */
+  deleteTask(taskId: string): Promise<void>;
 
   /**
    * Perform a handoff from current caregiver to another

@@ -367,6 +367,61 @@ export function createNoteDeletedNote(author: string, noteText: string): CareNot
 }
 
 /**
+ * Create a system note for task added (pure function)
+ */
+export function createTaskAddedNote(author: string, taskText: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${author} added a task: "${taskText}"`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for task completed (pure function)
+ */
+export function createTaskCompletedNote(author: string, taskText: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${author} completed the task: "${taskText}"`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for task uncompleted (pure function)
+ */
+export function createTaskUncompletedNote(author: string, taskText: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${author} marked the task as incomplete: "${taskText}"`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for task updated (pure function)
+ */
+export function createTaskUpdatedNote(author: string, oldText: string, newText: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${author} updated the task from "${oldText}" to "${newText}"`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for task deleted (pure function)
+ */
+export function createTaskDeletedNote(author: string, taskText: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `${author} deleted the task: "${taskText}"`,
+    author: 'System'
+  };
+}
+
+/**
  * Notebook index types and utilities.
  * Manages local index of known notebooks (client-side only, not stored in Firestore).
  */

@@ -5,7 +5,7 @@
  */
 
 import type { DataAdapter } from './DataAdapter';
-import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker, Task } from '../domain/types';
 import { LocalStorageAdapter } from './localStorageAdapter';
 import { ApiAdapter } from './apiAdapter';
 import { FirebaseAdapter } from './FirebaseAdapter';
@@ -53,8 +53,24 @@ class HybridAdapter implements DataAdapter {
     return this.firebaseAdapter.deleteNote(noteIndex);
   }
 
-  async toggleTask(taskId: string, completed: boolean): Promise<void> {
-    return this.localStorageAdapter.toggleTask(taskId, completed);
+  async toggleTask(taskId: string): Promise<void> {
+    // Route to FirebaseAdapter - it handles Firestore writes
+    return this.firebaseAdapter.toggleTask(taskId);
+  }
+
+  async addTask(text: string): Promise<Task> {
+    // Route to FirebaseAdapter - it handles Firestore writes
+    return this.firebaseAdapter.addTask(text);
+  }
+
+  async updateTask(taskId: string, newText: string): Promise<Task> {
+    // Route to FirebaseAdapter - it handles Firestore writes
+    return this.firebaseAdapter.updateTask(taskId, newText);
+  }
+
+  async deleteTask(taskId: string): Promise<void> {
+    // Route to FirebaseAdapter - it handles Firestore writes
+    return this.firebaseAdapter.deleteTask(taskId);
   }
 
   async handoff(toCaregiverName: string): Promise<void> {

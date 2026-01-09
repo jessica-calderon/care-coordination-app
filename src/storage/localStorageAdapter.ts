@@ -5,7 +5,7 @@
  */
 
 import type { DataAdapter } from './DataAdapter';
-import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
+import type { CareNote, TodayState, NotesByDate, Caretaker, Task } from '../domain/types';
 import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCaretakerNameChangedNote, createNoteDeletedNote } from '../domain/notebook';
 import { todayData } from '../mock/todayData';
 import { nanoid } from 'nanoid';
@@ -372,7 +372,39 @@ export class LocalStorageAdapter implements DataAdapter {
    * Note: Tasks are currently mock data and not persisted, so this is a no-op
    * but included for interface completeness.
    */
-  async toggleTask(_taskId: string, _completed: boolean): Promise<void> {
+  async toggleTask(_taskId: string): Promise<void> {
+    // Tasks are not currently persisted in localStorage
+    // This is a no-op for now, but the interface is ready for future implementation
+  }
+
+  /**
+   * Add a new task
+   * Note: Tasks are currently mock data and not persisted, so this is a no-op
+   * but included for interface completeness.
+   */
+  async addTask(_text: string): Promise<Task> {
+    // Tasks are not currently persisted in localStorage
+    // This is a no-op for now, but the interface is ready for future implementation
+    throw new Error('Tasks are not persisted in localStorage adapter');
+  }
+
+  /**
+   * Update an existing task
+   * Note: Tasks are currently mock data and not persisted, so this is a no-op
+   * but included for interface completeness.
+   */
+  async updateTask(_taskId: string, _newText: string): Promise<Task> {
+    // Tasks are not currently persisted in localStorage
+    // This is a no-op for now, but the interface is ready for future implementation
+    throw new Error('Tasks are not persisted in localStorage adapter');
+  }
+
+  /**
+   * Delete an existing task
+   * Note: Tasks are currently mock data and not persisted, so this is a no-op
+   * but included for interface completeness.
+   */
+  async deleteTask(_taskId: string): Promise<void> {
     // Tasks are not currently persisted in localStorage
     // This is a no-op for now, but the interface is ready for future implementation
   }
