@@ -132,6 +132,40 @@ export class FirebaseAdapter implements DataAdapter {
   }
 
   /**
+   * Load active caretakers from Firestore.
+   * This method explicitly loads caretakers during notebook initialization.
+   * Reads from /notebooks/{notebookId}/caretakers and filters by isActive === true.
+   * Returns an empty array ONLY if the collection truly has no documents.
+   * 
+   * @returns Array of active caretakers
+   */
+  async loadCaretakers(): Promise<Caretaker[]> {
+    try {
+      const caretakersRef = this.getCaretakersCollection();
+      const querySnapshot = await getDocs(caretakersRef);
+      
+      const caretakers: Caretaker[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data() as FirestoreCaretaker;
+        const caretaker = this.firestoreCaretakerToDomain(docSnap.id, data);
+        // Filter by isActive === true
+        if (caretaker.isActive) {
+          caretakers.push(caretaker);
+        }
+      });
+
+      return caretakers;
+    } catch (error) {
+      // Silently handle errors - return empty array
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Ignore AbortError - request was cancelled
+        return [];
+      }
+      return [];
+    }
+  }
+
+  /**
    * Get the primary caretaker from Firestore
    * Returns the name of the primary caretaker, or empty string if none exists
    */
@@ -151,10 +185,47 @@ export class FirebaseAdapter implements DataAdapter {
   }
 
   /**
+   * Ensures the Today document exists in Firestore.
+   * Creates it with initial state if it doesn't exist.
+   * This is called at the start of all Today entry points to guarantee
+   * the document exists before any operations.
+   */
+  private async ensureNotebookInitialized(): Promise<void> {
+    const todayKey = getTodayDateKey();
+    const todayRef = doc(
+      firestore,
+      'notebooks',
+      this.notebookId,
+      'today',
+      todayKey
+    );
+
+    const snap = await getDoc(todayRef);
+
+    if (snap.exists()) {
+      return;
+    }
+
+    const initialTodayState: TodayState = {
+      careNotes: [],
+      tasks: [],
+      currentCaregiver: '',
+      lastUpdatedBy: ''
+    };
+
+    await setDoc(todayRef, {
+      ...initialTodayState,
+      createdAt: Timestamp.now(),
+      version: 1
+    });
+  }
+
+  /**
    * Private initializer that is CARETAKER-AWARE.
    * Ensures Today document exists and has valid caregiver state.
-   * If Today exists AND has a caregiver, trusts it.
-   * Otherwise hydrates from caretakers (active caretakers, primary or first active).
+   * Always checks Firestore for caretakers first (authoritative source).
+   * If caretakers exist in Firestore, uses them to hydrate currentCaregiver.
+   * Otherwise, trusts existing Today document if it has a caregiver.
    * Uses merge: true to never wipe existing data.
    */
   private async ensureTodayDocument(): Promise<TodayState> {
@@ -168,28 +239,61 @@ export class FirebaseAdapter implements DataAdapter {
     );
 
     const snap = await getDoc(todayRef);
+    const existingData = snap.exists() ? (snap.data() as TodayState) : null;
 
-    // If Today exists AND has a caregiver, trust it
-    if (snap.exists()) {
-      const data = snap.data() as TodayState;
-      if (data.currentCaregiver) {
-        return data;
+    // Always check Firestore for caretakers first (authoritative source)
+    // If caretakers exist in Firestore, use them to hydrate currentCaregiver
+    const activeCaretakers = await this.loadCaretakers();
+
+    if (activeCaretakers.length > 0) {
+      // Caretakers exist in Firestore - use them to compute current caregiver
+      const primary =
+        activeCaretakers.find(c => c.isPrimary) ??
+        activeCaretakers[0];
+
+      // If Today document exists and has a caregiver that matches an active caretaker, keep it
+      // Otherwise, use primary or first active caretaker
+      let currentCaregiver = primary?.name ?? '';
+      if (existingData?.currentCaregiver) {
+        const existingCaregiverIsActive = activeCaretakers.some(
+          c => c.name.toLowerCase() === existingData.currentCaregiver.toLowerCase()
+        );
+        if (existingCaregiverIsActive) {
+          currentCaregiver = existingData.currentCaregiver;
+        }
       }
+
+      const hydrated: TodayState = {
+        careNotes: existingData?.careNotes ?? [],
+        tasks: existingData?.tasks ?? todayData.tasks ?? [],
+        currentCaregiver: currentCaregiver,
+        lastUpdatedBy: existingData?.lastUpdatedBy ?? currentCaregiver
+      };
+
+      await setDoc(
+        todayRef,
+        {
+          ...hydrated,
+          createdAt: Timestamp.now(),
+          version: 1
+        },
+        { merge: true } // IMPORTANT: never wipe existing data
+      );
+
+      return hydrated;
     }
 
-    // Otherwise hydrate from caretakers
-    const caretakers = await this.getCaretakers();
-    const active = caretakers.filter(c => c.isActive);
+    // No caretakers in Firestore - trust existing Today document if it has a caregiver
+    if (existingData?.currentCaregiver) {
+      return existingData;
+    }
 
-    const primary =
-      active.find(c => c.isPrimary) ??
-      active[0];
-
+    // No caretakers and no existing caregiver - create empty state
     const hydrated: TodayState = {
-      careNotes: snap.exists() ? (snap.data() as TodayState).careNotes ?? [] : [],
-      tasks: snap.exists() ? (snap.data() as TodayState).tasks ?? todayData.tasks ?? [] : todayData.tasks ?? [],
-      currentCaregiver: primary?.name ?? '',
-      lastUpdatedBy: primary?.name ?? ''
+      careNotes: existingData?.careNotes ?? [],
+      tasks: existingData?.tasks ?? todayData.tasks ?? [],
+      currentCaregiver: '',
+      lastUpdatedBy: ''
     };
 
     await setDoc(
@@ -211,6 +315,7 @@ export class FirebaseAdapter implements DataAdapter {
    * Never throws, never falls back.
    */
   async loadToday(): Promise<TodayState> {
+    await this.ensureNotebookInitialized();
     return this.ensureTodayDocument();
   }
 
@@ -220,6 +325,7 @@ export class FirebaseAdapter implements DataAdapter {
    * No caching, no localStorage.
    */
   async addNote(noteText: string): Promise<CareNote> {
+    await this.ensureNotebookInitialized();
     const dateKey = getTodayDateKey();
     const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
     
@@ -294,6 +400,7 @@ export class FirebaseAdapter implements DataAdapter {
    * Stub: No-op
    */
   async toggleTask(_taskId: string, _completed: boolean): Promise<void> {
+    await this.ensureNotebookInitialized();
     // TODO: Implement Firestore update
   }
 
@@ -302,6 +409,7 @@ export class FirebaseAdapter implements DataAdapter {
    * Updates currentCaregiver, lastUpdatedBy, and creates a system handoff note.
    */
   async handoff(toCaregiverName: string): Promise<void> {
+    await this.ensureNotebookInitialized();
     const dateKey = getTodayDateKey();
     const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
     
@@ -420,6 +528,7 @@ export class FirebaseAdapter implements DataAdapter {
    * They are NEVER written to Today documents or localStorage.
    */
   async addCaretaker(name: string): Promise<void> {
+    await this.ensureNotebookInitialized();
     const trimmedName = name.trim();
     if (!trimmedName) {
       return;
@@ -517,6 +626,7 @@ export class FirebaseAdapter implements DataAdapter {
    * They are NEVER written to Today documents or localStorage.
    */
   async archiveCaretaker(nameOrId: string): Promise<void> {
+    await this.ensureNotebookInitialized();
     // Step 1: Read current caretakers from Firebase (authoritative source)
     const currentCaretakers = await this.loadCaretakersFromFirestore();
     
@@ -572,6 +682,7 @@ export class FirebaseAdapter implements DataAdapter {
    * They are NEVER written to Today documents or localStorage.
    */
   async restoreCaretaker(nameOrId: string): Promise<void> {
+    await this.ensureNotebookInitialized();
     // Step 1: Read current caretakers from Firebase (authoritative source)
     const currentCaretakers = await this.loadCaretakersFromFirestore();
 
@@ -626,6 +737,7 @@ export class FirebaseAdapter implements DataAdapter {
    * They are NEVER written to Today documents or localStorage.
    */
   async setPrimaryCaretaker(nameOrId: string): Promise<void> {
+    await this.ensureNotebookInitialized();
     // Step 1: Read current caretakers from Firebase (authoritative source)
     const currentCaretakers = await this.loadCaretakersFromFirestore();
 
