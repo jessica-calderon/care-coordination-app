@@ -8,7 +8,6 @@ import { addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretake
 import { Icons } from '../ui/icons';
 import { Spinner } from '../components/Spinner';
 import { InlineSpinner } from '../components/InlineSpinner';
-import CareeNameModal from '../components/CareeNameModal';
 
 function CareTeam() {
   const dataAdapter = useDataAdapter();
@@ -21,7 +20,6 @@ function CareTeam() {
   const [restoringCaretaker, setRestoringCaretaker] = useState<string | null>(null);
   const [settingPrimary, setSettingPrimary] = useState<string | null>(null);
   const [careeName, setCareeName] = useState<string>('Care recipient');
-  const [showEditCareeNameModal, setShowEditCareeNameModal] = useState(false);
   const [editingCaretakerId, setEditingCaretakerId] = useState<string | null>(null);
   const [editingCaretakerName, setEditingCaretakerName] = useState<string>('');
   const [updatingCaretakerName, setUpdatingCaretakerName] = useState<string | null>(null);
@@ -285,25 +283,8 @@ function CareTeam() {
           </div>
         ) : (
           <>
-        <h1 className="text-3xl md:text-4xl font-normal mb-8 leading-tight inline-flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-          <span>Care Team for {careeName}</span>
-          <button
-            type="button"
-            onClick={() => setShowEditCareeNameModal(true)}
-            className="p-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
-            style={{
-              color: 'var(--text-secondary)',
-              '--tw-ring-color': 'var(--focus-ring)',
-            } as React.CSSProperties}
-            aria-label={`Edit care recipient name for ${careeName}`}
-            title={`Edit care recipient name for ${careeName}`}
-          >
-            <FontAwesomeIcon 
-              icon={Icons.quickNote} 
-              style={{ fontSize: '0.75em' }} 
-              aria-hidden="true" 
-            />
-          </button>
+        <h1 className="text-3xl md:text-4xl font-normal mb-8 leading-tight" style={{ color: 'var(--text-primary)' }}>
+          Care Team for {careeName}
         </h1>
 
         <header className="mb-8 pb-6 border-b" style={{ borderColor: 'var(--border-color)' }}>
@@ -567,29 +548,6 @@ function CareTeam() {
           </>
         )}
       </div>
-      <CareeNameModal
-        isOpen={showEditCareeNameModal}
-        onClose={() => setShowEditCareeNameModal(false)}
-        onSubmit={async (newCareeName: string) => {
-          try {
-            const notebookId = resolveNotebookId();
-            if (notebookId) {
-              const adapter = createFirebaseAdapter(notebookId);
-              await adapter.updateNotebookMetadata(newCareeName);
-              setCareeName(newCareeName);
-              setShowEditCareeNameModal(false);
-            }
-          } catch (error) {
-            // Silently handle errors
-            if (error instanceof Error && error.name === 'AbortError') {
-              return;
-            }
-          }
-        }}
-        initialValue={careeName}
-        title="Update care recipient name"
-        submitLabel="Update"
-      />
     </main>
   );
 }

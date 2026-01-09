@@ -76,7 +76,7 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
                   style={{ fontSize: '1em' }} 
                   aria-hidden="true" 
                 />
-                <span className="text-sm hidden sm:inline">Care team</span>
+                <span className="text-sm hidden sm:inline">Care Team</span>
               </button>
             )}
             <button
