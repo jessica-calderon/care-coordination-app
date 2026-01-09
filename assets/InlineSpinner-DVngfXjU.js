@@ -1,0 +1,1 @@
+import{j as n}from"./react-vendor-Bd7vrGHb.js";import{S as s}from"./index-z5j_IKo6.js";function m({size:e="sm",className:r=""}){return n.jsx("span",{className:`inline-flex items-center ${r}`,children:n.jsx(s,{size:e})})}export{m as I};
