@@ -8,7 +8,7 @@
 import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 import { firestore } from '../firebase/config';
-import { getTodayDateKey, createCareNote, createHandoffNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCareeNameChangedNote, createCaretakerNameChangedNote } from '../domain/notebook';
+import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCareeNameChangedNote, createCaretakerNameChangedNote, createNoteDeletedNote } from '../domain/notebook';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { todayData } from '../mock/todayData';
 import { nanoid } from 'nanoid';
@@ -42,6 +42,57 @@ export class FirebaseAdapter implements DataAdapter {
    */
   constructor(notebookId: string) {
     this.notebookId = notebookId;
+  }
+
+  /**
+   * Helper function to handle Firestore errors with retry logic
+   * Note: Quota errors are not retried as they indicate a hard limit
+   * @param operation The async operation to retry
+   * @param maxRetries Maximum number of retries (default: 3)
+   * @param baseDelay Base delay in milliseconds (default: 1000)
+   */
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        lastError = error;
+        
+        // Check if it's a quota/resource-exhausted error
+        const isQuotaError = 
+          error?.code === 'resource-exhausted' ||
+          error?.code === 'quota-exceeded' ||
+          (error?.message && error.message.includes('quota'));
+        
+        // Don't retry quota errors - they indicate a hard limit that won't be resolved by retrying
+        if (isQuotaError) {
+          throw error;
+        }
+        
+        // For other errors, retry if we haven't exceeded max retries
+        if (attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+          const timestamp = new Date().toISOString();
+          console.warn(
+            `[${timestamp}] Firestore error (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`
+          );
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // After max retries, throw the error
+        throw error;
+      }
+    }
+    
+    // This should never be reached, but TypeScript needs it
+    throw lastError || new Error('Operation failed after retries');
   }
 
   /**
@@ -198,6 +249,7 @@ export class FirebaseAdapter implements DataAdapter {
    * Creates it with initial state if it doesn't exist.
    * This is called at the start of all Today entry points to guarantee
    * the document exists before any operations.
+   * Only writes if document doesn't exist.
    */
   private async ensureNotebookInitialized(): Promise<void> {
     const todayKey = getTodayDateKey();
@@ -222,11 +274,26 @@ export class FirebaseAdapter implements DataAdapter {
       lastUpdatedBy: ''
     };
 
-    await setDoc(todayRef, {
-      ...initialTodayState,
-      createdAt: Timestamp.now(),
-      version: 1
-    });
+    try {
+      await this.withRetry(async () => {
+        await setDoc(todayRef, {
+          ...initialTodayState,
+          createdAt: Timestamp.now(),
+          version: 1
+        });
+      });
+    } catch (error: any) {
+      // If quota error persists after retries, log and continue
+      // The document will be created on next attempt or by ensureTodayDocument
+      if (error?.code === 'resource-exhausted' || error?.code === 'quota-exceeded') {
+        const timestamp = new Date().toISOString();
+        console.error(`[${timestamp}] Firestore quota exceeded during notebook initialization. Will retry on next operation.`);
+        // Don't throw - allow the operation to continue
+        return;
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   /**
@@ -236,6 +303,7 @@ export class FirebaseAdapter implements DataAdapter {
    * If caretakers exist in Firestore, uses them to hydrate currentCaregiver.
    * Otherwise, trusts existing Today document if it has a caregiver.
    * Uses merge: true to never wipe existing data.
+   * Only writes to Firestore if document doesn't exist or needs updates.
    */
   private async ensureTodayDocument(): Promise<TodayState> {
     const dateKey = getTodayDateKey();
@@ -279,15 +347,36 @@ export class FirebaseAdapter implements DataAdapter {
         lastUpdatedBy: existingData?.lastUpdatedBy ?? currentCaregiver
       };
 
-      await setDoc(
-        todayRef,
-        {
-          ...hydrated,
-          createdAt: Timestamp.now(),
-          version: 1
-        },
-        { merge: true } // IMPORTANT: never wipe existing data
-      );
+      // Only write if document doesn't exist or if caregiver state needs updating
+      const needsUpdate = !existingData || 
+        existingData.currentCaregiver !== hydrated.currentCaregiver ||
+        existingData.lastUpdatedBy !== hydrated.lastUpdatedBy;
+
+      if (needsUpdate) {
+        try {
+          await this.withRetry(async () => {
+            await setDoc(
+              todayRef,
+              {
+                ...hydrated,
+                createdAt: (existingData as any)?.createdAt ?? Timestamp.now(),
+                version: 1
+              },
+              { merge: true } // IMPORTANT: never wipe existing data
+            );
+          });
+        } catch (error: any) {
+          // If quota error persists after retries, log and return existing data or hydrated state
+          if (error?.code === 'resource-exhausted' || error?.code === 'quota-exceeded') {
+            const timestamp = new Date().toISOString();
+            console.error(`[${timestamp}] Firestore quota exceeded. Returning existing or computed state without writing.`);
+            // Return existing data if available, otherwise return hydrated state
+            return existingData || hydrated;
+          }
+          // Re-throw other errors
+          throw error;
+        }
+      }
 
       return hydrated;
     }
@@ -305,15 +394,31 @@ export class FirebaseAdapter implements DataAdapter {
       lastUpdatedBy: ''
     };
 
-    await setDoc(
-      todayRef,
-      {
-        ...hydrated,
-        createdAt: Timestamp.now(),
-        version: 1
-      },
-      { merge: true } // IMPORTANT: never wipe existing data
-    );
+    // Only write if document doesn't exist
+    if (!existingData) {
+      try {
+        await this.withRetry(async () => {
+          await setDoc(
+            todayRef,
+            {
+              ...hydrated,
+              createdAt: Timestamp.now(),
+              version: 1
+            },
+            { merge: true } // IMPORTANT: never wipe existing data
+          );
+        });
+      } catch (error: any) {
+        // If quota error persists after retries, log and return hydrated state
+        if (error?.code === 'resource-exhausted' || error?.code === 'quota-exceeded') {
+          const timestamp = new Date().toISOString();
+          console.error(`[${timestamp}] Firestore quota exceeded. Returning computed state without writing.`);
+          return hydrated;
+        }
+        // Re-throw other errors
+        throw error;
+      }
+    }
 
     return hydrated;
   }
@@ -324,8 +429,31 @@ export class FirebaseAdapter implements DataAdapter {
    * Never throws, never falls back.
    */
   async loadToday(): Promise<TodayState> {
-    await this.ensureNotebookInitialized();
-    return this.ensureTodayDocument();
+    try {
+      await this.ensureNotebookInitialized();
+      return await this.ensureTodayDocument();
+    } catch (error: any) {
+      // Handle quota errors gracefully - return empty state
+      if (error?.code === 'resource-exhausted' || error?.code === 'quota-exceeded') {
+        const timestamp = new Date().toISOString();
+        console.error(`[${timestamp}] Firestore quota exceeded in loadToday. Returning empty state.`);
+        return {
+          careNotes: [],
+          tasks: [],
+          currentCaregiver: '',
+          lastUpdatedBy: ''
+        };
+      }
+      // For other errors, log and return empty state (never throw as per contract)
+      const timestamp = new Date().toISOString();
+      console.error(`[${timestamp}] Error loading today state:`, error);
+      return {
+        careNotes: [],
+        tasks: [],
+        currentCaregiver: '',
+        lastUpdatedBy: ''
+      };
+    }
   }
 
   /**
@@ -338,8 +466,10 @@ export class FirebaseAdapter implements DataAdapter {
     const dateKey = getTodayDateKey();
     const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
     
-    // Read current TodayState from Firestore
-    const docSnap = await getDoc(docRef);
+    // Read current TodayState from Firestore with retry logic
+    const docSnap = await this.withRetry(async () => {
+      return await getDoc(docRef);
+    });
     let todayState: TodayState;
     
     if (!docSnap.exists()) {
@@ -378,30 +508,121 @@ export class FirebaseAdapter implements DataAdapter {
       lastUpdatedBy: currentCaregiver
     };
     
-    // Write updated TodayState to Firestore using merge: true
-    await setDoc(docRef, updatedTodayState, { merge: true });
+    // Write updated TodayState to Firestore using merge: true with retry logic
+    await this.withRetry(async () => {
+      await setDoc(docRef, updatedTodayState, { merge: true });
+    });
     
     return newNote;
   }
 
   /**
    * Update an existing care note
-   * Stub: Returns updated note structure but doesn't persist
+   * Reads current TodayState from Firestore, updates the note, and writes back.
    */
-  async updateNote(_noteIndex: number, newNoteText: string): Promise<CareNote> {
-    // TODO: Implement Firestore update
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
+  async updateNote(noteIndex: number, newNoteText: string): Promise<CareNote> {
+    await this.ensureNotebookInitialized();
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore with retry logic
+    const docSnap = await this.withRetry(async () => {
+      return await getDoc(docRef);
     });
-    return {
-      time,
-      note: newNoteText,
-      author: todayData.currentCaregiver,
-      editedAt: now.toISOString()
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      throw new Error('Cannot update note: today document does not exist');
+    } else {
+      const data = docSnap.data();
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: data.tasks || todayData.tasks || [],
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || ''
+      };
+    }
+    
+    // Validate index
+    if (noteIndex < 0 || noteIndex >= todayState.careNotes.length) {
+      throw new Error('Invalid note index');
+    }
+    
+    // Update the note using domain function
+    const updatedNote = updateCareNote(todayState.careNotes[noteIndex], newNoteText);
+    
+    // Create updated notes array
+    const updatedNotes = [...todayState.careNotes];
+    updatedNotes[noteIndex] = updatedNote;
+    
+    // Update TodayState with updated note
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      careNotes: updatedNotes,
+      lastUpdatedBy: todayState.currentCaregiver
     };
+    
+    // Write updated TodayState to Firestore using merge: true with retry logic
+    await this.withRetry(async () => {
+      await setDoc(docRef, updatedTodayState, { merge: true });
+    });
+    
+    return updatedNote;
+  }
+
+  /**
+   * Delete an existing care note
+   * Reads current TodayState from Firestore, removes the note, and writes back.
+   */
+  async deleteNote(noteIndex: number): Promise<void> {
+    await this.ensureNotebookInitialized();
+    const dateKey = getTodayDateKey();
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Read current TodayState from Firestore
+    const docSnap = await getDoc(docRef);
+    let todayState: TodayState;
+    
+    if (!docSnap.exists()) {
+      throw new Error('Cannot delete note: today document does not exist');
+    } else {
+      const data = docSnap.data();
+      todayState = {
+        careNotes: data.careNotes || [],
+        tasks: data.tasks || todayData.tasks || [],
+        currentCaregiver: data.currentCaregiver || '',
+        lastUpdatedBy: data.lastUpdatedBy || ''
+      };
+    }
+    
+    // Validate index
+    if (noteIndex < 0 || noteIndex >= todayState.careNotes.length) {
+      throw new Error('Invalid note index');
+    }
+    
+    // Get the note being deleted (before removing it)
+    const noteToDelete = todayState.careNotes[noteIndex];
+    
+    // Create system note for deletion (only if not a system note)
+    let updatedNotes = [...todayState.careNotes];
+    if (noteToDelete.author !== 'System') {
+      const deleteNote = createNoteDeletedNote(noteToDelete.author, noteToDelete.note);
+      // Insert system note at the same position, then remove the original
+      updatedNotes.splice(noteIndex, 1, deleteNote);
+    } else {
+      // For system notes, just remove them without creating a deletion note
+      updatedNotes = updatedNotes.filter((_, index) => index !== noteIndex);
+    }
+    
+    // Update TodayState with updated notes
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      careNotes: updatedNotes,
+      lastUpdatedBy: todayState.currentCaregiver
+    };
+    
+    // Write updated TodayState to Firestore using merge: true
+    await setDoc(docRef, updatedTodayState, { merge: true });
   }
 
   /**

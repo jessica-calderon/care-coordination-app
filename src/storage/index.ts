@@ -44,7 +44,13 @@ class HybridAdapter implements DataAdapter {
   }
 
   async updateNote(noteIndex: number, newNoteText: string): Promise<CareNote> {
-    return this.localStorageAdapter.updateNote(noteIndex, newNoteText);
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.updateNote(noteIndex, newNoteText);
+  }
+
+  async deleteNote(noteIndex: number): Promise<void> {
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.deleteNote(noteIndex);
   }
 
   async toggleTask(taskId: string, completed: boolean): Promise<void> {

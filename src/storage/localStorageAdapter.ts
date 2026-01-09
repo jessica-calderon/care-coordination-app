@@ -6,7 +6,7 @@
 
 import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
-import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote } from '../domain/notebook';
+import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCaretakerNameChangedNote, createNoteDeletedNote } from '../domain/notebook';
 import { todayData } from '../mock/todayData';
 import { nanoid } from 'nanoid';
 
@@ -333,6 +333,41 @@ export class LocalStorageAdapter implements DataAdapter {
   }
 
   /**
+   * Delete an existing care note
+   */
+  async deleteNote(noteIndex: number): Promise<void> {
+    const todayKey = getTodayDateKey();
+    
+    // Load current notes
+    const notesByDate = loadNotesByDate();
+    const todayNotes = notesByDate[todayKey] || [];
+    
+    // Validate index
+    if (noteIndex < 0 || noteIndex >= todayNotes.length) {
+      throw new Error('Invalid note index');
+    }
+    
+    // Get the note being deleted (before removing it)
+    const noteToDelete = todayNotes[noteIndex];
+    
+    // Create system note for deletion (only if not a system note)
+    let updatedNotes = [...todayNotes];
+    if (noteToDelete.author !== 'System') {
+      const deleteNote = createNoteDeletedNote(noteToDelete.author, noteToDelete.note);
+      // Insert system note at the same position, then remove the original
+      updatedNotes.splice(noteIndex, 1, deleteNote);
+    } else {
+      // For system notes, just remove them without creating a deletion note
+      updatedNotes = updatedNotes.filter((_, index) => index !== noteIndex);
+    }
+    
+    const updatedNotesByDate = { ...notesByDate, [todayKey]: updatedNotes };
+    
+    // Save to localStorage
+    saveNotesByDate(updatedNotesByDate);
+  }
+
+  /**
    * Toggle task completion status
    * Note: Tasks are currently mock data and not persisted, so this is a no-op
    * but included for interface completeness.
@@ -566,6 +601,89 @@ export class LocalStorageAdapter implements DataAdapter {
    */
   async getCaretakers(): Promise<Caretaker[]> {
     return loadCaretakers();
+  }
+
+  /**
+   * Update a caretaker's name
+   */
+  async updateCaretakerName(oldName: string, newName: string): Promise<void> {
+    const todayKey = getTodayDateKey();
+    const trimmedOldName = oldName.trim();
+    const trimmedNewName = newName.trim();
+    
+    if (!trimmedOldName || !trimmedNewName) {
+      throw new Error('Invalid name');
+    }
+    
+    if (trimmedOldName.toLowerCase() === trimmedNewName.toLowerCase()) {
+      // No change needed
+      return;
+    }
+    
+    // Load current caretakers
+    const currentCaretakers = loadCaretakers();
+    
+    // Check if new name already exists
+    if (currentCaretakers.some(c => c.name.toLowerCase() === trimmedNewName.toLowerCase())) {
+      throw new Error('A caretaker with this name already exists');
+    }
+    
+    // Find the caretaker
+    const caretakerIndex = currentCaretakers.findIndex(c => 
+      c.name.toLowerCase() === trimmedOldName.toLowerCase()
+    );
+    
+    if (caretakerIndex === -1) {
+      throw new Error('Caretaker not found');
+    }
+    
+    // Update the caretaker's name
+    const updatedCaretakers = currentCaretakers.map((c, index) => 
+      index === caretakerIndex ? { ...c, name: trimmedNewName } : c
+    );
+    
+    // Save updated caretakers
+    saveCaretakers(updatedCaretakers);
+    
+    // Update references in localStorage
+    const currentCaregiver = localStorage.getItem(STORAGE_KEY_CURRENT_CAREGIVER);
+    if (currentCaregiver === trimmedOldName) {
+      localStorage.setItem(STORAGE_KEY_CURRENT_CAREGIVER, trimmedNewName);
+    }
+    
+    const lastUpdatedBy = localStorage.getItem(STORAGE_KEY_LAST_UPDATED_BY);
+    if (lastUpdatedBy === trimmedOldName) {
+      localStorage.setItem(STORAGE_KEY_LAST_UPDATED_BY, trimmedNewName);
+    }
+    
+    // Update notes that reference the old name
+    const notesByDate = loadNotesByDate();
+    let notesUpdated = false;
+    const updatedNotesByDate: NotesByDate = {};
+    
+    for (const [dateKey, notes] of Object.entries(notesByDate)) {
+      const updatedNotes = notes.map(note => {
+        if (note.author === trimmedOldName) {
+          notesUpdated = true;
+          return { ...note, author: trimmedNewName };
+        }
+        return note;
+      });
+      updatedNotesByDate[dateKey] = updatedNotes;
+    }
+    
+    if (notesUpdated) {
+      saveNotesByDate(updatedNotesByDate);
+    }
+    
+    // Create system note and add to today's notes
+    const systemNote = createCaretakerNameChangedNote(trimmedOldName, trimmedNewName);
+    const todayNotes = updatedNotesByDate[todayKey] || notesByDate[todayKey] || [];
+    const updatedTodayNotes = [systemNote, ...todayNotes];
+    const finalNotesByDate = { ...updatedNotesByDate, [todayKey]: updatedTodayNotes };
+    
+    // Save notes
+    saveNotesByDate(finalNotesByDate);
   }
 }
 

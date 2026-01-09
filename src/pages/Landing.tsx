@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Icons } from '../ui/icons';
 import type { NotebookIndex } from '../domain/notebook';
-import { generateNotebookDisplayName } from '../domain/notebook';
 import { createFirebaseAdapter } from '../storage';
 
 interface LandingProps {

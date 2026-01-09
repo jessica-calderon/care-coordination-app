@@ -28,6 +28,12 @@ export interface DataAdapter {
   updateNote(noteIndex: number, newNoteText: string): Promise<CareNote>;
 
   /**
+   * Delete an existing care note
+   * @param noteIndex The index of the note in today's notes array
+   */
+  deleteNote(noteIndex: number): Promise<void>;
+
+  /**
    * Toggle task completion status
    * @param taskId The ID of the task to toggle
    * @param completed The new completion status

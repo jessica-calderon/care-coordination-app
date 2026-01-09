@@ -77,6 +77,15 @@ export class ApiAdapter implements DataAdapter {
   }
 
   /**
+   * Delete an existing care note
+   */
+  async deleteNote(noteIndex: number): Promise<void> {
+    await apiRequest<void>(`/notes/${noteIndex}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Toggle task completion status
    */
   async toggleTask(taskId: string, completed: boolean): Promise<void> {
@@ -163,6 +172,16 @@ export class ApiAdapter implements DataAdapter {
    */
   async getCaretakers(): Promise<Caretaker[]> {
     return apiRequest<Caretaker[]>('/caretakers');
+  }
+
+  /**
+   * Update a caretaker's name
+   */
+  async updateCaretakerName(oldName: string, newName: string): Promise<void> {
+    await apiRequest<void>(`/caretakers/${encodeURIComponent(oldName)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: newName }),
+    });
   }
 }
 

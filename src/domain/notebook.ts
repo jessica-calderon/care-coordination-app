@@ -90,54 +90,35 @@ export function createHandoffNote(fromCaregiver: string, toCaregiver: string): C
 }
 
 /**
- * Parse time string (e.g., "8:30 AM") to Date object for today
- * Returns null if parsing fails
- */
-function parseTimeString(timeStr: string, dateKey?: string): Date | null {
-  try {
-    const [timePart, ampm] = timeStr.split(' ');
-    const [hours, minutes] = timePart.split(':');
-    let hour24 = parseInt(hours, 10);
-    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
-    
-    const baseDate = dateKey ? new Date(dateKey + 'T00:00:00') : new Date();
-    baseDate.setHours(hour24, parseInt(minutes, 10), 0, 0);
-    return baseDate;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Check if a note can be edited by the current caregiver
  * Returns true only if:
  * - Note author matches current caregiver
  * - Note is not a system note
- * - Note was created within the last 15 minutes
  */
-export function canEditNote(note: CareNote, currentCaregiver: string, now: Date): boolean {
+export function canEditNote(note: CareNote, currentCaregiver: string): boolean {
   // System notes cannot be edited
   if (note.author === 'System') {
     return false;
   }
   
   // Only author can edit
-  if (note.author !== currentCaregiver) {
+  return note.author === currentCaregiver;
+}
+
+/**
+ * Check if a note can be deleted by the current caregiver
+ * Returns true only if:
+ * - Note author matches current caregiver
+ * - Note is not a system note
+ */
+export function canDeleteNote(note: CareNote, currentCaregiver: string): boolean {
+  // System notes cannot be deleted
+  if (note.author === 'System') {
     return false;
   }
   
-  // Parse the note's creation time
-  const noteDate = parseTimeString(note.time);
-  if (!noteDate) {
-    return false;
-  }
-  
-  // Check if note was created within 15 minutes
-  const diffMs = now.getTime() - noteDate.getTime();
-  const diffMinutes = diffMs / (1000 * 60);
-  
-  return diffMinutes <= 15;
+  // Only author can delete
+  return note.author === currentCaregiver;
 }
 
 /**
@@ -368,6 +349,19 @@ export function createCaretakerNameChangedNote(oldName: string, newName: string)
   return {
     time: formatTime(new Date()),
     note: `Caretaker name changed from "${oldName}" to "${newName}".`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for note deleted (pure function)
+ */
+export function createNoteDeletedNote(author: string, noteText: string): CareNote {
+  // Truncate note text if too long for display
+  const truncatedText = noteText.length > 100 ? noteText.substring(0, 100) + '...' : noteText;
+  return {
+    time: formatTime(new Date()),
+    note: `${author} deleted a note: "${truncatedText}"`,
     author: 'System'
   };
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { todayData } from '../mock/todayData';
 import type { CareNote, NotesByDate, Caretaker } from '../domain/types';
-import { getTodayDateKey, formatDateLabel, canEditNote } from '../domain/notebook';
+import { getTodayDateKey, canEditNote, canDeleteNote } from '../domain/notebook';
 import { useDataAdapter } from '../storage/DataAdapterContext';
 import { createFirebaseAdapter } from '../storage';
 import { resolveNotebookId } from '../utils/notebookId';
@@ -28,8 +28,10 @@ function Today() {
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isHandingOff, setIsHandingOff] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState<number | null>(null);
+  const [isDeletingNote, setIsDeletingNote] = useState<number | null>(null);
   const [careeName, setCareeName] = useState<string>('Care recipient');
   const [showEditCareeNameModal, setShowEditCareeNameModal] = useState(false);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set()); // Track which days are expanded
 
   // Track the last date we checked to avoid unnecessary updates
   const lastCheckedDateRef = useRef<string>(getTodayDateKey());
@@ -110,6 +112,16 @@ function Today() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally empty - only run once on mount
 
+  // Expand the latest day in Earlier section by default
+  useEffect(() => {
+    const historyEntries = getHistoryEntries();
+    if (historyEntries.length > 0 && expandedDays.size === 0) {
+      // Expand the first (most recent) day
+      setExpandedDays(new Set([historyEntries[0].dateKey]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesByDate]);
+
   // Refresh state when page becomes visible again (e.g., navigating back from CareTeam)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -178,6 +190,88 @@ function Today() {
     return () => clearInterval(interval);
   }, []);
 
+  // Format date key to show actual date (not "Today", "Yesterday", etc.)
+  const formatDateWithDay = (dateKey: string): string => {
+    const date = new Date(dateKey + 'T00:00:00');
+    const today = new Date();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = dayNames[date.getDay()];
+    const dateStr = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+    });
+    return `${dayName}, ${dateStr}`;
+  };
+
+  // Toggle day expansion
+  const toggleDay = (dateKey: string) => {
+    setExpandedDays(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(dateKey)) {
+        newSet.delete(dateKey);
+      } else {
+        newSet.add(dateKey);
+      }
+      return newSet;
+    });
+  };
+
+  // Get care notes grouped by date
+  const getCareNotesByDate = (): Array<{ dateKey: string; dateLabel: string; notes: CareNote[] }> => {
+    const todayKey = getTodayDateKey();
+    const entries: Array<{ dateKey: string; dateLabel: string; notes: CareNote[] }> = [];
+    
+    // Group care notes by matching them with notesByDate
+    // Create a map to track which notes belong to which date
+    const notesByDateKey: Record<string, CareNote[]> = {};
+    
+    // For each note in careNotes, find which dateKey it belongs to
+    for (const note of careNotes) {
+      let found = false;
+      // Check each dateKey in notesByDate to find where this note exists
+      for (const dateKey of Object.keys(notesByDate)) {
+        const notesForDate = notesByDate[dateKey] || [];
+        // Match note by time, author, and note text (since notes don't have IDs)
+        const matchingNote = notesForDate.find(n => 
+          n.time === note.time && 
+          n.author === note.author && 
+          n.note === note.note
+        );
+        if (matchingNote) {
+          if (!notesByDateKey[dateKey]) {
+            notesByDateKey[dateKey] = [];
+          }
+          notesByDateKey[dateKey].push(note);
+          found = true;
+          break;
+        }
+      }
+      // If not found in notesByDate, assume it's from today
+      if (!found) {
+        if (!notesByDateKey[todayKey]) {
+          notesByDateKey[todayKey] = [];
+        }
+        notesByDateKey[todayKey].push(note);
+      }
+    }
+    
+    // Convert to entries array, sorted by date (most recent first)
+    const dateKeys = Object.keys(notesByDateKey)
+      .filter(key => notesByDateKey[key] && notesByDateKey[key].length > 0)
+      .sort((a, b) => b.localeCompare(a));
+    
+    for (const dateKey of dateKeys) {
+      entries.push({
+        dateKey,
+        dateLabel: formatDateWithDay(dateKey),
+        notes: notesByDateKey[dateKey]
+      });
+    }
+    
+    return entries;
+  };
+
   // Get history entries (last 3 days, excluding today)
   const getHistoryEntries = (): Array<{ dateKey: string; dateLabel: string; notes: CareNote[] }> => {
     const todayKey = getTodayDateKey();
@@ -192,7 +286,7 @@ function Today() {
     for (const dateKey of dateKeys) {
       entries.push({
         dateKey,
-        dateLabel: formatDateLabel(dateKey),
+        dateLabel: formatDateWithDay(dateKey),
         notes: notesByDate[dateKey]
       });
     }
@@ -219,7 +313,18 @@ function Today() {
         if (error instanceof Error && error.name === 'AbortError') {
           return;
         }
-        // Other errors are handled by global error handler
+        // Show error message to user
+        let errorMessage = 'Failed to add comment. Please try again.';
+        if (error instanceof Error) {
+          // Check for quota/resource-exhausted errors
+          if (error.message.includes('quota') || error.message.includes('resource-exhausted') || 
+              (error as any)?.code === 'resource-exhausted') {
+            errorMessage = 'Unable to add comment: Firebase quota exceeded. Please try again later or contact support.';
+          } else {
+            errorMessage = error.message || errorMessage;
+          }
+        }
+        alert(errorMessage);
       } finally {
         setIsAddingNote(false);
       }
@@ -282,6 +387,8 @@ function Today() {
 
 
   const handleStartEdit = (noteIndex: number) => {
+    // Clear any previous saving state to ensure clean edit mode
+    setIsSavingEdit(null);
     setEditingNoteIndex(noteIndex);
     setEditingNoteText(careNotes[noteIndex].note);
   };
@@ -307,9 +414,49 @@ function Today() {
         const allNotes = await dataAdapter.getNotesByDate();
         setNotesByDate(allNotes);
         
+        // Clear saving state first, then reset editing state
+        setIsSavingEdit(null);
         // Reset editing state
         setEditingNoteIndex(null);
         setEditingNoteText('');
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          setIsSavingEdit(null);
+          return;
+        }
+        // Show error message to user
+        let errorMessage = 'Failed to save comment. Please try again.';
+        if (error instanceof Error) {
+          // Check for quota/resource-exhausted errors
+          if (error.message.includes('quota') || error.message.includes('resource-exhausted') || 
+              (error as any)?.code === 'resource-exhausted') {
+            errorMessage = 'Unable to save comment: Firebase quota exceeded. Please try again later or contact support.';
+          } else {
+            errorMessage = error.message || errorMessage;
+          }
+        }
+        alert(errorMessage);
+        // Clear saving state on error
+        setIsSavingEdit(null);
+      }
+    }
+  };
+
+  const handleDeleteNote = async (noteIndex: number) => {
+    if (isDeletingNote !== noteIndex) {
+      try {
+        setIsDeletingNote(noteIndex);
+        // Use adapter to delete note
+        await dataAdapter.deleteNote(noteIndex);
+        
+        // Update UI state - remove the note
+        const updatedNotes = careNotes.filter((_, index) => index !== noteIndex);
+        setCareNotes(updatedNotes);
+        
+        // Reload notesByDate to keep history in sync
+        const allNotes = await dataAdapter.getNotesByDate();
+        setNotesByDate(allNotes);
       } catch (error) {
         // Silently handle AbortError - request was cancelled
         if (error instanceof Error && error.name === 'AbortError') {
@@ -317,7 +464,7 @@ function Today() {
         }
         // Other errors are handled by global error handler
       } finally {
-        setIsSavingEdit(null);
+        setIsDeletingNote(null);
       }
     }
   };
@@ -468,40 +615,61 @@ function Today() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4" role="list" aria-label="Care notes for today">
-              {careNotes.map((note, index) => {
-                // Parse time string (e.g., "8:30 AM" or "2:00 PM") to datetime
-                const parseTime = (timeStr: string): string => {
-                  try {
-                    const [timePart, ampm] = timeStr.split(' ');
-                    const [hours, minutes] = timePart.split(':');
-                    let hour24 = parseInt(hours, 10);
-                    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-                    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
-                    const noteDate = new Date();
-                    noteDate.setHours(hour24, parseInt(minutes, 10));
-                    return noteDate.toISOString();
-                  } catch {
-                    return '';
-                  }
-                };
-                const isoTime = parseTime(note.time);
-                const isEditing = editingNoteIndex === index;
-                const now = new Date();
-                const canEdit = canEditNote(note, currentCaregiver, now);
+            <div className="space-y-6" role="list" aria-label="Care notes">
+              {getCareNotesByDate().map((entry) => {
+                // Calculate the starting index for notes in this group
+                let globalIndexOffset = 0;
+                const allGrouped = getCareNotesByDate();
+                for (const group of allGrouped) {
+                  if (group.dateKey === entry.dateKey) break;
+                  globalIndexOffset += group.notes.length;
+                }
                 
                 return (
-                  <article key={index} className="border-b pb-4 last:border-b-0" style={{ borderColor: 'var(--border-color)' }} role="listitem">
-                    <div className="flex items-start gap-3">
-                      <time 
-                        className="text-sm font-medium whitespace-nowrap" 
-                        style={{ color: 'var(--text-muted)' }}
-                        dateTime={isoTime || undefined}
-                        aria-label={`Note added at ${note.time}`}
-                      >
-                        <FontAwesomeIcon icon={Icons.time} className="mr-1 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-                        {note.time}
-                      </time>
+                  <div key={entry.dateKey}>
+                    <h3 className="text-base font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>
+                      {entry.dateLabel}
+                    </h3>
+                    {entry.notes.length === 0 ? (
+                      <p className="text-sm py-2" style={{ color: 'var(--text-muted)' }}>
+                        No notes for this day.
+                      </p>
+                    ) : (
+                      <div className="space-y-4">
+                      {entry.notes.map((note, localIndex) => {
+                        const index = globalIndexOffset + localIndex;
+                        // Parse time string (e.g., "8:30 AM" or "2:00 PM") to datetime
+                        const parseTime = (timeStr: string, dateKey: string): string => {
+                          try {
+                            const [timePart, ampm] = timeStr.split(' ');
+                            const [hours, minutes] = timePart.split(':');
+                            let hour24 = parseInt(hours, 10);
+                            if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+                            if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+                            const noteDate = new Date(dateKey + 'T00:00:00');
+                            noteDate.setHours(hour24, parseInt(minutes, 10));
+                            return noteDate.toISOString();
+                          } catch {
+                            return '';
+                          }
+                        };
+                        const isoTime = parseTime(note.time, entry.dateKey);
+                        const isEditing = editingNoteIndex === index;
+                        const canEdit = canEditNote(note, currentCaregiver);
+                        const canDelete = canDeleteNote(note, currentCaregiver);
+                
+                        return (
+                          <article key={index} className="border-b pb-4 last:border-b-0" style={{ borderColor: 'var(--border-color)' }} role="listitem">
+                            <div className="flex items-start gap-3">
+                              <time 
+                                className="text-sm font-medium whitespace-nowrap" 
+                                style={{ color: 'var(--text-muted)' }}
+                                dateTime={isoTime || undefined}
+                                aria-label={`Note added at ${note.time} on ${entry.dateLabel}`}
+                              >
+                                <FontAwesomeIcon icon={Icons.time} className="mr-1 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                                {note.time}
+                              </time>
                       <div className="flex-1">
                         {isEditing ? (
                           <div className="space-y-2">
@@ -566,35 +734,92 @@ function Today() {
                               }}>
                                 {note.note}
                               </p>
-                              {canEdit && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEdit(index)}
-                                  className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer flex-shrink-0 hover:opacity-80"
-                                  style={{ 
-                                    color: 'var(--text-secondary)',
-                                    backgroundColor: 'transparent',
-                                    '--tw-ring-color': 'var(--focus-ring)',
-                                  } as React.CSSProperties}
-                                  aria-label="Edit note"
-                                >
-                                  Edit
-                                </button>
-                              )}
+                              <div className="flex gap-2 flex-shrink-0">
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEdit(index)}
+                                    className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+                                    style={{ 
+                                      color: 'var(--text-secondary)',
+                                      backgroundColor: 'transparent',
+                                      '--tw-ring-color': 'var(--focus-ring)',
+                                    } as React.CSSProperties}
+                                    aria-label="Edit note"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                {canDelete && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteNote(index)}
+                                    disabled={isDeletingNote === index}
+                                    className="text-sm px-2 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                                    style={{ 
+                                      color: 'var(--text-secondary)',
+                                      backgroundColor: 'transparent',
+                                      '--tw-ring-color': 'var(--focus-ring)',
+                                    } as React.CSSProperties}
+                                    aria-label="Delete note"
+                                  >
+                                    {isDeletingNote === index ? (
+                                      <>
+                                        <InlineSpinner size="sm" />
+                                        <span className="sr-only">Deleting...</span>
+                                      </>
+                                    ) : (
+                                      'Delete'
+                                    )}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <p className="text-xs mt-1.5" style={{ color: 'var(--text-light)' }} aria-label={`Noted by ${note.author}`}>
                               — {note.author}
-                              {note.editedAt && (
-                                <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label="Note was edited">
-                                  (edited)
-                                </span>
-                              )}
+                              {note.editedAt && (() => {
+                                try {
+                                  const editDate = new Date(note.editedAt);
+                                  const today = new Date();
+                                  
+                                  // Always show date and time
+                                  const editDateStr = editDate.toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: editDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+                                  });
+                                  const editTime = editDate.toLocaleTimeString('en-US', { 
+                                    hour: 'numeric', 
+                                    minute: '2-digit',
+                                    hour12: true 
+                                  });
+                                  const editDisplay = `${editDateStr} at ${editTime}`;
+                                  const ariaLabel = `Note was edited on ${editDateStr} at ${editTime}`;
+                                  
+                                  return (
+                                    <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label={ariaLabel}>
+                                      (edited at {editDisplay})
+                                    </span>
+                                  );
+                                } catch {
+                                  return (
+                                    <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label="Note was edited">
+                                      (edited)
+                                    </span>
+                                  );
+                                }
+                              })()}
                             </p>
                           </>
                         )}
                       </div>
                     </div>
-                  </article>
+                        </article>
+                      );
+                      })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -812,14 +1037,49 @@ function Today() {
                 />
               </button>
               <div id="earlier-content" className={isEarlierExpanded ? '' : 'hidden'}>
+              {historyEntries.length > 0 && (
+                <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                  Click on any day to expand or collapse its notes.
+                </p>
+              )}
               <div className="space-y-6" role="list" aria-label="Earlier care notes">
-                {historyEntries.map((entry) => (
-                  <div key={entry.dateKey} role="listitem">
-                    <h3 className="text-base font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>
-                      {entry.dateLabel}
-                    </h3>
-                    <ul className="space-y-2" role="list" aria-label={`Care notes for ${entry.dateLabel}`}>
-                      {entry.notes.map((note, index) => {
+                {historyEntries.map((entry) => {
+                  const isDayExpanded = expandedDays.has(entry.dateKey);
+                  
+                  return (
+                    <div key={entry.dateKey} role="listitem">
+                      <button
+                        type="button"
+                        onClick={() => toggleDay(entry.dateKey)}
+                        className="w-full flex items-center justify-between text-left mb-3 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 -ml-2 hover:opacity-80 transition-opacity"
+                        style={{ 
+                          '--tw-ring-color': 'var(--focus-ring)',
+                        } as React.CSSProperties}
+                        aria-expanded={isDayExpanded}
+                        aria-controls={`earlier-day-${entry.dateKey}`}
+                      >
+                        <h3 className="text-base font-medium" style={{ color: 'var(--text-secondary)' }}>
+                          {entry.dateLabel}
+                        </h3>
+                        <FontAwesomeIcon 
+                          icon={isDayExpanded ? Icons.chevronUp : Icons.chevronDown} 
+                          className="opacity-50" 
+                          style={{ fontSize: '0.75em', color: 'var(--text-secondary)' }} 
+                          aria-hidden="true" 
+                        />
+                      </button>
+                      {entry.notes.length === 0 ? (
+                        <p className="text-sm py-2" style={{ color: 'var(--text-muted)' }}>
+                          No notes for this day.
+                        </p>
+                      ) : (
+                        <ul 
+                          id={`earlier-day-${entry.dateKey}`}
+                          className={isDayExpanded ? 'space-y-2' : 'hidden'} 
+                          role="list" 
+                          aria-label={`Care notes for ${entry.dateLabel}`}
+                        >
+                        {entry.notes.map((note, index) => {
                         const noteWithAuthor = {
                           ...note,
                           author: note.author || 'Unknown'
@@ -861,19 +1121,48 @@ function Today() {
                               </p>
                               <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }} aria-label={`Noted by ${noteWithAuthor.author}`}>
                                 — {noteWithAuthor.author}
-                                {noteWithAuthor.editedAt && (
-                                  <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label="Note was edited">
-                                    (edited)
-                                  </span>
-                                )}
+                                {noteWithAuthor.editedAt && (() => {
+                                  try {
+                                    const editDate = new Date(noteWithAuthor.editedAt);
+                                    const today = new Date();
+                                    
+                                    // Always show date and time
+                                    const editDateStr = editDate.toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: editDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+                                    });
+                                    const editTime = editDate.toLocaleTimeString('en-US', { 
+                                      hour: 'numeric', 
+                                      minute: '2-digit',
+                                      hour12: true 
+                                    });
+                                    const editDisplay = `${editDateStr} at ${editTime}`;
+                                    const ariaLabel = `Note was edited on ${editDateStr} at ${editTime}`;
+                                    
+                                    return (
+                                      <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label={ariaLabel}>
+                                        (edited at {editDisplay})
+                                      </span>
+                                    );
+                                  } catch {
+                                    return (
+                                      <span className="ml-2" style={{ color: 'var(--text-muted)' }} aria-label="Note was edited">
+                                        (edited)
+                                      </span>
+                                    );
+                                  }
+                                })()}
                               </p>
                             </div>
                           </li>
                         );
                       })}
-                    </ul>
-                  </div>
-                ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               </div>
             </section>
