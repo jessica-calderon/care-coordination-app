@@ -8,6 +8,7 @@ import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 import { getTodayDateKey, createCareNote, createHandoffNote, updateCareNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote } from '../domain/notebook';
 import { todayData } from '../mock/todayData';
+import { nanoid } from 'nanoid';
 
 const STORAGE_KEY_NOTES_BY_DATE = 'care-app-notes-by-date';
 const STORAGE_KEY_LAST_DATE = 'care-app-last-date';
@@ -36,7 +37,7 @@ function migrateOldData(): NotesByDate {
         localStorage.removeItem(oldKey);
         return migrated;
       }
-    } catch (e) {
+    } catch {
       // If parsing fails, ignore old data
     }
   }
@@ -60,7 +61,7 @@ function loadNotesByDate(): NotesByDate {
         }));
       }
       return migrated;
-    } catch (e) {
+    } catch {
       return {};
     }
   }
@@ -113,6 +114,7 @@ function loadCaretakers(): Caretaker[] {
           // Migrate old format: convert string[] to Caretaker[]
           // First caretaker becomes primary, all are active
           const migrated: Caretaker[] = parsed.map((name: string, index: number) => ({
+            id: nanoid(),
             name,
             isPrimary: index === 0,
             isActive: true
@@ -139,7 +141,7 @@ function loadCaretakers(): Caretaker[] {
           return caretakers;
         }
       }
-    } catch (e) {
+    } catch {
       // If parsing fails, return defaults
     }
   }
@@ -148,17 +150,17 @@ function loadCaretakers(): Caretaker[] {
   // Initialize with current caregiver and the other default (Lupe or Maria)
   // Ensure current caregiver is primary, and include the other default if different
   const defaultCaretakers: Caretaker[] = [
-    { name: currentCaregiver, isPrimary: true, isActive: true }
+    { id: nanoid(), name: currentCaregiver, isPrimary: true, isActive: true }
   ];
   if (currentCaregiver === 'Lupe') {
-    defaultCaretakers.push({ name: 'Maria', isPrimary: false, isActive: true });
+    defaultCaretakers.push({ id: nanoid(), name: 'Maria', isPrimary: false, isActive: true });
   } else if (currentCaregiver === 'Maria') {
-    defaultCaretakers.push({ name: 'Lupe', isPrimary: false, isActive: true });
+    defaultCaretakers.push({ id: nanoid(), name: 'Lupe', isPrimary: false, isActive: true });
   } else {
     // If current caregiver is neither default, include both defaults
     defaultCaretakers.push(
-      { name: 'Lupe', isPrimary: false, isActive: true },
-      { name: 'Maria', isPrimary: false, isActive: true }
+      { id: nanoid(), name: 'Lupe', isPrimary: false, isActive: true },
+      { id: nanoid(), name: 'Maria', isPrimary: false, isActive: true }
     );
   }
   // Save defaults to localStorage so they persist and show up immediately
@@ -211,7 +213,7 @@ export class LocalStorageAdapter implements DataAdapter {
       // Add current caregiver as active, and make them primary if no primary exists
       const hasPrimary = caretakers.some(c => c.isPrimary);
       caretakers = [
-        { name: currentCaregiver, isPrimary: !hasPrimary, isActive: true },
+        { id: nanoid(), name: currentCaregiver, isPrimary: !hasPrimary, isActive: true },
         ...caretakers
       ];
       saveCaretakers(caretakers);
@@ -273,8 +275,7 @@ export class LocalStorageAdapter implements DataAdapter {
       careNotes,
       tasks,
       currentCaregiver,
-      lastUpdatedBy,
-      caretakers
+      lastUpdatedBy
     };
   }
 
@@ -391,7 +392,7 @@ export class LocalStorageAdapter implements DataAdapter {
           );
           if (hasNotes) return true;
         }
-      } catch (e) {
+      } catch {
         // If parsing fails, continue checking other indicators
       }
     }
@@ -411,7 +412,7 @@ export class LocalStorageAdapter implements DataAdapter {
         if (Array.isArray(tasksData) && tasksData.length > 0) {
           return true;
         }
-      } catch (e) {
+      } catch {
         // If parsing fails, continue
       }
     }

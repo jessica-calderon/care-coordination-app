@@ -52,7 +52,7 @@ try {
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     analytics = getAnalytics(firebaseApp);
   }
-} catch (error) {
+} catch {
   // Silently fail if Analytics cannot be initialized
   // This can happen in unsupported environments, SSR, or if Analytics is not available
   // No console error in production to avoid noise

@@ -98,7 +98,7 @@ export class FirebaseAdapter implements DataAdapter {
           data: docSnap.data() as FirestoreCaretaker
         };
       }
-    } catch (error) {
+    } catch {
       // If document ID lookup fails, try by name
     }
 
