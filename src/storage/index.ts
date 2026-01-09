@@ -40,11 +40,13 @@ class HybridAdapter implements DataAdapter {
   }
 
   /**
-   * All write operations delegate to localStorage for now
-   * (Firebase writes will be implemented in a future step)
+   * Add a new care note.
+   * Routes to FirebaseAdapter when notebookId exists (which it always does in HybridAdapter).
+   * FirebaseAdapter handles writing to Firestore and caching to localStorage.
    */
   async addNote(noteText: string): Promise<CareNote> {
-    return this.localStorageAdapter.addNote(noteText);
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.addNote(noteText);
   }
 
   async updateNote(noteIndex: number, newNoteText: string): Promise<CareNote> {
