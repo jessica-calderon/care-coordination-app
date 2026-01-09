@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { todayData } from '../mock/todayData';
 import type { CareNote, NotesByDate, Caretaker } from '../domain/types';
@@ -28,43 +28,68 @@ function Today() {
     careNotesRef.current = careNotes;
   }, [careNotes]);
 
+  // Helper function to load state from adapter
+  const loadState = useCallback(async () => {
+    try {
+      const todayState = await dataAdapter.loadToday();
+      setCareNotes(todayState.careNotes);
+      setCurrentCaregiver(todayState.currentCaregiver);
+      setLastUpdatedBy(todayState.lastUpdatedBy);
+      
+      // Load caretakers from Firebase (authoritative source)
+      const loadedCaretakers = await dataAdapter.getCaretakers();
+      setCaretakers(loadedCaretakers);
+      
+      // Initialize handoff target to first available active caretaker
+      const otherActiveCaretakers = loadedCaretakers.filter(c => 
+        c.isActive && c.name !== todayState.currentCaregiver
+      );
+      if (otherActiveCaretakers.length > 0) {
+        setSelectedHandoffTarget(otherActiveCaretakers[0].name);
+      } else {
+        setSelectedHandoffTarget('');
+      }
+      
+      // Load notesByDate for history
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
+      
+      // Initialize date ref
+      lastCheckedDateRef.current = getTodayDateKey();
+    } catch (error) {
+      // Silently handle AbortError - request was cancelled
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      // Other errors are handled by global error handler
+    }
+  }, []);
+
   // Load initial state from adapter
   useEffect(() => {
-    const loadState = async () => {
-      try {
-        const todayState = await dataAdapter.loadToday();
-        setCareNotes(todayState.careNotes);
-        setCurrentCaregiver(todayState.currentCaregiver);
-        setLastUpdatedBy(todayState.lastUpdatedBy);
-        
-        // Load caretakers from Firebase (authoritative source)
-        const loadedCaretakers = await dataAdapter.getCaretakers();
-        setCaretakers(loadedCaretakers);
-        
-        // Initialize handoff target to first available active caretaker
-        const otherActiveCaretakers = loadedCaretakers.filter(c => 
-          c.isActive && c.name !== todayState.currentCaregiver
-        );
-        if (otherActiveCaretakers.length > 0) {
-          setSelectedHandoffTarget(otherActiveCaretakers[0].name);
-        }
-        
-        // Load notesByDate for history
-        const allNotes = await dataAdapter.getNotesByDate();
-        setNotesByDate(allNotes);
-        
-        // Initialize date ref
-        lastCheckedDateRef.current = getTodayDateKey();
-      } catch (error) {
-        // Silently handle AbortError - request was cancelled
-        if (error instanceof Error && error.name === 'AbortError') {
-          return;
-        }
-        // Other errors are handled by global error handler
+    loadState();
+  }, [loadState]);
+
+  // Refresh state when page becomes visible again (e.g., navigating back from CareTeam)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadState();
       }
     };
-    loadState();
-  }, []);
+
+    const handleFocus = () => {
+      loadState();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadState]);
 
   // Check for date change on mount and periodically
   useEffect(() => {

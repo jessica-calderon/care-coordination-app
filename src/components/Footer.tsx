@@ -34,7 +34,7 @@ function Footer({ onNavigateAbout, onNavigateHowItWorks, onNavigatePrivacy }: Fo
           {/* Left: App name + tagline */}
           <div className="flex-shrink-0">
             <p className="font-medium" style={{ color: 'var(--text-secondary)' }}>
-              Care Notebook · v0.1.0
+              Care Notebook · v0.2.0
             </p>
             <p className="text-xs mt-0.5">
               Shared care, simply.
@@ -44,7 +44,7 @@ function Footer({ onNavigateAbout, onNavigateHowItWorks, onNavigatePrivacy }: Fo
           {/* Center: Data clarity note */}
           <div className="flex-shrink-0 text-center sm:text-left">
             <small style={{ color: 'var(--text-muted)' }}>
-              Stored only on this device
+              Stored securely in the cloud
             </small>
           </div>
 
