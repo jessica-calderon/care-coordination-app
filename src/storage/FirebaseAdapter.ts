@@ -8,7 +8,7 @@
 import type { DataAdapter } from './DataAdapter';
 import type { CareNote, TodayState, NotesByDate, Caretaker } from '../domain/types';
 import { firestore } from '../firebase/config';
-import { getTodayDateKey, createCareNote, createHandoffNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote } from '../domain/notebook';
+import { getTodayDateKey, createCareNote, createHandoffNote, addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain, createCaretakerAddedNote, createCaretakerArchivedNote, createCaretakerRestoredNote, createPrimaryContactChangedNote, createCareeNameChangedNote, createCaretakerNameChangedNote } from '../domain/notebook';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { todayData } from '../mock/todayData';
 import { nanoid } from 'nanoid';
@@ -22,6 +22,15 @@ interface FirestoreCaretaker {
   isPrimary: boolean;
   isActive: boolean;
   createdAt: Timestamp;
+}
+
+/**
+ * Notebook metadata structure in Firestore
+ */
+export interface NotebookMetadata {
+  careeName: string;
+  createdAt: Timestamp;
+  lastOpenedAt: Timestamp;
 }
 
 export class FirebaseAdapter implements DataAdapter {
@@ -725,6 +734,114 @@ export class FirebaseAdapter implements DataAdapter {
   }
 
   /**
+   * Update a caretaker's name
+   * Supports both name and ID lookup for the old name
+   * 
+   * MUTATION PATTERN:
+   * 1. Find caretaker document in Firestore
+   * 2. Update the name field
+   * 3. Update any references in Today documents if needed
+   * 
+   * @param oldName The current name of the caretaker
+   * @param newName The new name for the caretaker
+   */
+  async updateCaretakerName(oldName: string, newName: string): Promise<void> {
+    await this.ensureNotebookInitialized();
+    const trimmedOldName = oldName.trim();
+    const trimmedNewName = newName.trim();
+    
+    if (!trimmedOldName || !trimmedNewName) {
+      throw new Error('Invalid name');
+    }
+    
+    if (trimmedOldName.toLowerCase() === trimmedNewName.toLowerCase()) {
+      // No change needed
+      return;
+    }
+    
+    // Check if new name already exists
+    const currentCaretakers = await this.loadCaretakersFromFirestore();
+    if (currentCaretakers.some(c => c.name.toLowerCase() === trimmedNewName.toLowerCase())) {
+      throw new Error('A caretaker with this name already exists');
+    }
+    
+    // Find the caretaker document
+    const caretakerDoc = await this.findCaretakerByIdOrName(trimmedOldName);
+    if (!caretakerDoc) {
+      throw new Error('Caretaker not found');
+    }
+    
+    // Update the caretaker document
+    const docRef = doc(firestore, 'notebooks', this.notebookId, 'caretakers', caretakerDoc.id);
+    await updateDoc(docRef, { name: trimmedNewName });
+    
+    // Update references in Today documents (currentCaregiver and lastUpdatedBy)
+    const todayCollectionRef = collection(firestore, 'notebooks', this.notebookId, 'today');
+    const querySnapshot = await getDocs(todayCollectionRef);
+    
+    const batchUpdates: Promise<void>[] = [];
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const updates: any = {};
+      let needsUpdate = false;
+      
+      if (data.currentCaregiver === trimmedOldName) {
+        updates.currentCaregiver = trimmedNewName;
+        needsUpdate = true;
+      }
+      
+      if (data.lastUpdatedBy === trimmedOldName) {
+        updates.lastUpdatedBy = trimmedNewName;
+        needsUpdate = true;
+      }
+      
+      // Update careNotes that reference the old name
+      if (data.careNotes && Array.isArray(data.careNotes)) {
+        const updatedNotes = data.careNotes.map((note: any) => {
+          if (note.author === trimmedOldName) {
+            return { ...note, author: trimmedNewName };
+          }
+          return note;
+        });
+        
+        // Check if any notes were updated
+        const notesChanged = updatedNotes.some((note: any, index: number) => 
+          note.author !== data.careNotes[index].author
+        );
+        
+        if (notesChanged) {
+          updates.careNotes = updatedNotes;
+          needsUpdate = true;
+        }
+      }
+      
+      if (needsUpdate) {
+        const updateRef = doc(firestore, 'notebooks', this.notebookId, 'today', docSnap.id);
+        batchUpdates.push(updateDoc(updateRef, updates));
+      }
+    });
+    
+    await Promise.all(batchUpdates);
+    
+    // Create system note and add to today's notes
+    const systemNote = createCaretakerNameChangedNote(trimmedOldName, trimmedNewName);
+    const dateKey = getTodayDateKey();
+    const todayDocRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+    
+    // Load today state
+    const todayState = await this.loadToday();
+    
+    // Add system note at the beginning
+    const updatedCareNotes = [systemNote, ...todayState.careNotes];
+    const updatedTodayState: TodayState = {
+      ...todayState,
+      careNotes: updatedCareNotes
+    };
+    
+    await setDoc(todayDocRef, updatedTodayState, { merge: true });
+  }
+
+  /**
    * Set a caretaker as the primary contact
    * Supports both name and ID lookup
    * 
@@ -794,6 +911,106 @@ export class FirebaseAdapter implements DataAdapter {
 
     // Re-hydrate Today to ensure valid caregiver state after mutation
     await this.ensureTodayDocument();
+  }
+
+  /**
+   * Create a new notebook with metadata in Firestore.
+   * Creates the notebook document at /notebooks/{notebookId} with careeName.
+   * @param careeName The name of the care recipient
+   */
+  async createNotebook(careeName: string): Promise<void> {
+    const notebookRef = doc(firestore, 'notebooks', this.notebookId);
+    const now = Timestamp.now();
+    
+    await setDoc(notebookRef, {
+      careeName: careeName.trim(),
+      createdAt: now,
+      lastOpenedAt: now
+    });
+  }
+
+  /**
+   * Update notebook metadata in Firestore.
+   * Updates the careeName and lastOpenedAt timestamp.
+   * Creates a system note when the name changes.
+   * @param careeName The updated name of the care recipient
+   */
+  async updateNotebookMetadata(careeName: string): Promise<void> {
+    const notebookRef = doc(firestore, 'notebooks', this.notebookId);
+    
+    // Get old name before updating
+    const snap = await getDoc(notebookRef);
+    const oldName = snap.exists() ? (snap.data().careeName || 'Care recipient') : 'Care recipient';
+    const newName = careeName.trim();
+    
+    // Only create note if name actually changed
+    if (oldName !== newName) {
+      // Update the metadata
+      await updateDoc(notebookRef, {
+        careeName: newName,
+        lastOpenedAt: Timestamp.now()
+      });
+      
+      // Create system note and add to today's notes
+      const systemNote = createCareeNameChangedNote(oldName, newName);
+      const dateKey = getTodayDateKey();
+      const todayDocRef = doc(firestore, 'notebooks', this.notebookId, 'today', dateKey);
+      
+      // Load today state
+      const todayState = await this.loadToday();
+      
+      // Add system note at the beginning
+      const updatedCareNotes = [systemNote, ...todayState.careNotes];
+      const updatedTodayState: TodayState = {
+        ...todayState,
+        careNotes: updatedCareNotes
+      };
+      
+      await setDoc(todayDocRef, updatedTodayState, { merge: true });
+    } else {
+      // Just update timestamp if name didn't change
+      await updateDoc(notebookRef, {
+        lastOpenedAt: Timestamp.now()
+      });
+    }
+  }
+
+  /**
+   * Get notebook metadata from Firestore.
+   * Returns metadata with careeName, or fallback to "Care recipient" if not found.
+   * @returns Notebook metadata
+   */
+  async getNotebookMetadata(): Promise<NotebookMetadata> {
+    try {
+      const notebookRef = doc(firestore, 'notebooks', this.notebookId);
+      const snap = await getDoc(notebookRef);
+      
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          careeName: data.careeName || 'Care recipient',
+          createdAt: data.createdAt || Timestamp.now(),
+          lastOpenedAt: data.lastOpenedAt || Timestamp.now()
+        };
+      }
+      
+      // Notebook doesn't exist - return fallback
+      return {
+        careeName: 'Care recipient',
+        createdAt: Timestamp.now(),
+        lastOpenedAt: Timestamp.now()
+      };
+    } catch (error) {
+      // Silently handle errors - return fallback
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Ignore AbortError - request was cancelled
+      }
+      return {
+        careeName: 'Care recipient',
+        createdAt: Timestamp.now(),
+        lastOpenedAt: Timestamp.now()
+      };
+    }
   }
 
   /**

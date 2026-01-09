@@ -79,6 +79,14 @@ export interface DataAdapter {
   setPrimaryCaretaker(name: string): Promise<void>;
 
   /**
+   * Update a caretaker's name
+   * @param oldName The current name of the caretaker
+   * @param newName The new name for the caretaker
+   * @throws Error if caretaker not found or new name is invalid
+   */
+  updateCaretakerName(oldName: string, newName: string): Promise<void>;
+
+  /**
    * Get the list of all caretakers
    * @returns Array of caretaker objects
    */

@@ -83,6 +83,11 @@ class HybridAdapter implements DataAdapter {
     return this.firebaseAdapter.setPrimaryCaretaker(name);
   }
 
+  async updateCaretakerName(oldName: string, newName: string): Promise<void> {
+    // Route to FirebaseAdapter - it handles Firestore writes
+    return this.firebaseAdapter.updateCaretakerName(oldName, newName);
+  }
+
   async getCaretakers(): Promise<Caretaker[]> {
     // CARETAKERS CANONICAL LOCATION: /notebooks/{notebookId}/caretakers collection
     // NO FALLBACK to localStorage - Firebase is the single authoritative source

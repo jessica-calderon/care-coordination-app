@@ -68,8 +68,8 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
                   color: 'var(--text-secondary)',
                   '--tw-ring-color': 'var(--focus-ring)',
                 } as React.CSSProperties}
-                aria-label="Care team"
-                title="Care team"
+                aria-label="Care Team"
+                title="Care Team"
               >
                 <FontAwesomeIcon 
                   icon={Icons.careTeam} 

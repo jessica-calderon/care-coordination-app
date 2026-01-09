@@ -351,6 +351,28 @@ export function createPrimaryContactChangedNote(name: string): CareNote {
 }
 
 /**
+ * Create a system note for caree name changed (pure function)
+ */
+export function createCareeNameChangedNote(oldName: string, newName: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `Care recipient name changed from "${oldName}" to "${newName}".`,
+    author: 'System'
+  };
+}
+
+/**
+ * Create a system note for caretaker name changed (pure function)
+ */
+export function createCaretakerNameChangedNote(oldName: string, newName: string): CareNote {
+  return {
+    time: formatTime(new Date()),
+    note: `Caretaker name changed from "${oldName}" to "${newName}".`,
+    author: 'System'
+  };
+}
+
+/**
  * Notebook index types and utilities.
  * Manages local index of known notebooks (client-side only, not stored in Firestore).
  */

@@ -7,7 +7,8 @@ import About from './pages/About';
 import HowItWorks from './pages/HowItWorks';
 import Privacy from './pages/Privacy';
 import Footer from './components/Footer';
-import { createDataAdapter } from './storage';
+import CareeNameModal from './components/CareeNameModal';
+import { createDataAdapter, createFirebaseAdapter } from './storage';
 import { DataAdapterContext } from './storage/DataAdapterContext';
 import { resolveNotebookId, createNewNotebook, switchToNotebook, updateUrlWithNotebookId } from './utils/notebookId';
 import { readNotebookIndex } from './domain/notebook';
@@ -29,6 +30,7 @@ function App() {
   });
 
   const [notebookIndex, setNotebookIndex] = useState(() => readNotebookIndex());
+  const [showCareeNameModal, setShowCareeNameModal] = useState(false);
 
   // Create adapter for current notebook ID
   const dataAdapter = useMemo(() => {
@@ -70,10 +72,21 @@ function App() {
   }, [currentNotebookId]);
 
   const handleStartNotebook = () => {
+    // Show modal to prompt for caree name
+    setShowCareeNameModal(true);
+  }
+
+  const handleCareeNameSubmit = async (careeName: string) => {
     // Create a new notebook
     const newNotebookId = createNewNotebook();
+    
+    // Create notebook metadata in Firestore with careeName
+    const adapter = createFirebaseAdapter(newNotebookId);
+    await adapter.createNotebook(careeName);
+    
     setCurrentNotebookId(newNotebookId);
     setNotebookIndex(readNotebookIndex());
+    setShowCareeNameModal(false);
     setCurrentView('today');
   }
 
@@ -148,6 +161,11 @@ function App() {
           />
         )}
       </AppShell>
+      <CareeNameModal
+        isOpen={showCareeNameModal}
+        onClose={() => setShowCareeNameModal(false)}
+        onSubmit={handleCareeNameSubmit}
+      />
     </DataAdapterContext.Provider>
   );
 }

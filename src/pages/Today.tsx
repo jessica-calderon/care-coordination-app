@@ -4,7 +4,12 @@ import { todayData } from '../mock/todayData';
 import type { CareNote, NotesByDate, Caretaker } from '../domain/types';
 import { getTodayDateKey, formatDateLabel, canEditNote } from '../domain/notebook';
 import { useDataAdapter } from '../storage/DataAdapterContext';
+import { createFirebaseAdapter } from '../storage';
+import { resolveNotebookId } from '../utils/notebookId';
 import { Icons } from '../ui/icons';
+import { Spinner } from '../components/Spinner';
+import { InlineSpinner } from '../components/InlineSpinner';
+import CareeNameModal from '../components/CareeNameModal';
 
 function Today() {
   const dataAdapter = useDataAdapter();
@@ -19,10 +24,17 @@ function Today() {
   const [editingNoteText, setEditingNoteText] = useState('');
   const [isCareNotesExpanded, setIsCareNotesExpanded] = useState(false);
   const [isEarlierExpanded, setIsEarlierExpanded] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isHandingOff, setIsHandingOff] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState<number | null>(null);
+  const [careeName, setCareeName] = useState<string>('Care recipient');
+  const [showEditCareeNameModal, setShowEditCareeNameModal] = useState(false);
 
   // Track the last date we checked to avoid unnecessary updates
   const lastCheckedDateRef = useRef<string>(getTodayDateKey());
   const careNotesRef = useRef<CareNote[]>(careNotes);
+  const hasLoadedRef = useRef(false);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -30,8 +42,11 @@ function Today() {
   }, [careNotes]);
 
   // Helper function to load state from adapter
-  const loadState = useCallback(async () => {
+  const loadState = useCallback(async (isInitial = false) => {
     try {
+      if (isInitial) {
+        setIsInitialLoading(true);
+      }
       const todayState = await dataAdapter.loadToday();
       setCareNotes(todayState.careNotes);
       setCurrentCaregiver(todayState.currentCaregiver);
@@ -55,21 +70,45 @@ function Today() {
       const allNotes = await dataAdapter.getNotesByDate();
       setNotesByDate(allNotes);
       
+      // Load careeName from notebook metadata
+      const notebookId = resolveNotebookId();
+      if (notebookId) {
+        const adapter = createFirebaseAdapter(notebookId);
+        const metadata = await adapter.getNotebookMetadata();
+        setCareeName(metadata.careeName);
+      }
+      
       // Initialize date ref
       lastCheckedDateRef.current = getTodayDateKey();
     } catch (error) {
       // Silently handle AbortError - request was cancelled
       if (error instanceof Error && error.name === 'AbortError') {
+        if (isInitial) {
+          setIsInitialLoading(false);
+        }
         return;
       }
-      // Other errors are handled by global error handler
+      // Log other errors for debugging
+      console.error('Error loading state:', error);
+      // Ensure loading state is cleared even on error
+      if (isInitial) {
+        setIsInitialLoading(false);
+      }
+    } finally {
+      if (isInitial) {
+        setIsInitialLoading(false);
+      }
     }
   }, [dataAdapter]);
 
-  // Load initial state from adapter
+  // Load initial state from adapter (only once on mount)
   useEffect(() => {
-    loadState();
-  }, [loadState]);
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadState(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty - only run once on mount
 
   // Refresh state when page becomes visible again (e.g., navigating back from CareTeam)
   useEffect(() => {
@@ -162,8 +201,9 @@ function Today() {
   };
 
   const handleAddNote = async () => {
-    if (noteText.trim()) {
+    if (noteText.trim() && !isAddingNote) {
       try {
+        setIsAddingNote(true);
         // Use adapter to add note
         const newNote = await dataAdapter.addNote(noteText.trim());
         
@@ -180,6 +220,8 @@ function Today() {
           return;
         }
         // Other errors are handled by global error handler
+      } finally {
+        setIsAddingNote(false);
       }
     }
   };
@@ -190,7 +232,7 @@ function Today() {
       c.isActive && c.name !== currentCaregiver
     );
     
-    if (otherActiveCaretakers.length === 0) {
+    if (otherActiveCaretakers.length === 0 || isHandingOff) {
       // No other active caretakers available - cannot handoff
       return;
     }
@@ -203,6 +245,7 @@ function Today() {
     }
     
     try {
+      setIsHandingOff(true);
       await dataAdapter.handoff(targetCaregiver);
       
       // Reload state from adapter
@@ -232,6 +275,8 @@ function Today() {
         return;
       }
       // Other errors are handled by global error handler
+    } finally {
+      setIsHandingOff(false);
     }
   };
 
@@ -247,8 +292,9 @@ function Today() {
   };
 
   const handleSaveEdit = async (noteIndex: number) => {
-    if (editingNoteText.trim()) {
+    if (editingNoteText.trim() && isSavingEdit !== noteIndex) {
       try {
+        setIsSavingEdit(noteIndex);
         // Use adapter to update note
         const updatedNote = await dataAdapter.updateNote(noteIndex, editingNoteText.trim());
         
@@ -270,6 +316,8 @@ function Today() {
           return;
         }
         // Other errors are handled by global error handler
+      } finally {
+        setIsSavingEdit(null);
       }
     }
   };
@@ -277,14 +325,37 @@ function Today() {
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <div className="px-6 py-8 max-w-2xl mx-auto">
+        {isInitialLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Spinner size="lg" />
+          </div>
+        ) : (
+          <>
         <h1 className="text-3xl md:text-4xl font-normal mb-8 leading-tight" style={{ color: 'var(--text-primary)' }}>
           Today
         </h1>
 
         <header className="mb-8 pb-6 border-b" style={{ borderColor: 'var(--border-color)' }}>
-          <h2 className="text-lg font-normal mb-2 inline-flex items-center" style={{ color: 'var(--text-secondary)' }}>
+          <h2 className="text-lg font-normal mb-2 inline-flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
             <FontAwesomeIcon icon={Icons.notebook} className="mr-2 opacity-75" style={{ fontSize: '0.95em' }} aria-hidden="true" />
-            Today — Wela
+            <span>Today — {careeName}</span>
+            <button
+              type="button"
+              onClick={() => setShowEditCareeNameModal(true)}
+              className="p-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+              style={{
+                color: 'var(--text-secondary)',
+                '--tw-ring-color': 'var(--focus-ring)',
+              } as React.CSSProperties}
+              aria-label="Edit care recipient name"
+              title="Edit care recipient name"
+            >
+              <FontAwesomeIcon 
+                icon={Icons.quickNote} 
+                style={{ fontSize: '0.75em' }} 
+                aria-hidden="true" 
+              />
+            </button>
           </h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             Current caregiver: <span className="font-medium" style={{ color: 'var(--text-secondary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
@@ -295,7 +366,7 @@ function Today() {
         {careNotes.length === 0 && todayData.tasks.length === 0 && (
           <section className="mb-8">
             <p className="text-base leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              This is today's shared care notebook. Add notes as things happen, and they'll be here for everyone helping care for Wela.
+              This is today's shared care notebook. Add notes as things happen, and they'll be here for everyone helping care for {careeName}.
             </p>
           </section>
         )}
@@ -335,20 +406,24 @@ function Today() {
             />
             <button
               type="submit"
-              className="w-full sm:w-auto px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+              disabled={isAddingNote}
+              className="w-full sm:w-auto px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
               style={{ 
                 color: 'var(--button-secondary-text)',
                 backgroundColor: 'var(--button-secondary-bg)',
                 '--tw-ring-color': 'var(--focus-ring)',
               } as React.CSSProperties}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                if (!isAddingNote) {
+                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
               }}
               aria-label="Add note to care notebook"
             >
+              {isAddingNote && <InlineSpinner size="sm" />}
               Add note
             </button>
           </form>
@@ -389,7 +464,7 @@ function Today() {
                 No notes yet today
               </p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                When you add a note, it will appear here for everyone caring for Wela.
+                When you add a note, it will appear here for everyone caring for {careeName}.
               </p>
             </div>
           ) : (
@@ -447,20 +522,24 @@ function Today() {
                               <button
                                 type="button"
                                 onClick={() => handleSaveEdit(index)}
-                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+                                disabled={isSavingEdit === index}
+                                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                                 style={{ 
                                   color: 'var(--button-secondary-text)',
                                   backgroundColor: 'var(--button-secondary-bg)',
                                   '--tw-ring-color': 'var(--focus-ring)',
                                 } as React.CSSProperties}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                                  if (isSavingEdit !== index) {
+                                    e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                                  }
                                 }}
                                 onMouseLeave={(e) => {
                                   e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
                                 }}
                                 aria-label="Save edited note"
                               >
+                                {isSavingEdit === index && <InlineSpinner size="sm" />}
                                 Save
                               </button>
                               <button
@@ -578,29 +657,36 @@ function Today() {
             <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
             Handoff
           </h2>
-          <div className="space-y-3 text-base" style={{ color: 'var(--text-secondary)' }}>
-            <p>
-              Last updated by: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Last updated by ${lastUpdatedBy}`}>{lastUpdatedBy}</span>
-            </p>
-            <p>
-              Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
-            </p>
-            {(() => {
-              // Get available active caretakers for handoff (exclude current)
-              const otherActiveCaretakers = caretakers.filter(c => 
-                c.isActive && c.name !== currentCaregiver
-              );
-              
-              if (otherActiveCaretakers.length === 0) {
-                // No other active caretakers available - disable handoff
-                return (
-                  <div className="mt-4">
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                      No other active caretakers available for handoff.
-                    </p>
-                  </div>
+          {caretakers.length === 0 ? (
+            <div className="space-y-3 text-base" style={{ color: 'var(--text-secondary)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                No caregivers have been added yet. Go to Care Team to add the people helping care for {careeName}.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 text-base" style={{ color: 'var(--text-secondary)' }}>
+              <p>
+                Last updated by: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Last updated by ${lastUpdatedBy || 'nobody yet'}`}>{lastUpdatedBy || 'nobody yet'}</span>
+              </p>
+              <p>
+                Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver || 'not set'}`}>{currentCaregiver || 'not set'}</span>
+              </p>
+              {(() => {
+                // Get available active caretakers for handoff (exclude current)
+                const otherActiveCaretakers = caretakers.filter(c => 
+                  c.isActive && c.name !== currentCaregiver
                 );
-              }
+                
+                if (otherActiveCaretakers.length === 0) {
+                  // No other active caretakers available - disable handoff
+                  return (
+                    <div className="mt-4">
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                        No other active caretakers available for handoff.
+                      </p>
+                    </div>
+                  );
+                }
               
               if (otherActiveCaretakers.length === 1) {
                 // Single option: show button
@@ -609,21 +695,28 @@ function Today() {
                   <button
                     type="button"
                     onClick={handleHandoff}
-                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+                    disabled={isHandingOff}
+                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                     style={{ 
                       color: 'var(--button-secondary-text)',
                       backgroundColor: 'var(--button-secondary-bg)',
                       '--tw-ring-color': 'var(--focus-ring)',
                     } as React.CSSProperties}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                      if (!isHandingOff) {
+                        e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                      }
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
                     }}
                     aria-label={`Hand off care to ${targetCaregiver}`}
                   >
-                    <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                    {isHandingOff ? (
+                      <InlineSpinner size="sm" />
+                    ) : (
+                      <FontAwesomeIcon icon={Icons.handoff} className="opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                    )}
                     Hand off care to {targetCaregiver}
                   </button>
                 );
@@ -658,28 +751,36 @@ function Today() {
                     <button
                       type="button"
                       onClick={handleHandoff}
-                      className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
+                      disabled={isHandingOff}
+                      className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                       style={{ 
                         color: 'var(--button-secondary-text)',
                         backgroundColor: 'var(--button-secondary-bg)',
                         '--tw-ring-color': 'var(--focus-ring)',
                       } as React.CSSProperties}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                        if (!isHandingOff) {
+                          e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
+                        }
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
                       }}
                       aria-label={`Hand off care to ${selectedHandoffTarget}`}
                     >
-                      <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                      {isHandingOff ? (
+                        <InlineSpinner size="sm" />
+                      ) : (
+                        <FontAwesomeIcon icon={Icons.handoff} className="opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
+                      )}
                       Hand off
                     </button>
                   </div>
                 </div>
               );
-            })()}
-          </div>
+              })()}
+            </div>
+          )}
         </section>
 
         {/* Earlier Section - Collapsible */}
@@ -778,7 +879,32 @@ function Today() {
             </section>
           );
         })()}
+          </>
+        )}
       </div>
+      <CareeNameModal
+        isOpen={showEditCareeNameModal}
+        onClose={() => setShowEditCareeNameModal(false)}
+        onSubmit={async (newCareeName: string) => {
+          try {
+            const notebookId = resolveNotebookId();
+            if (notebookId) {
+              const adapter = createFirebaseAdapter(notebookId);
+              await adapter.updateNotebookMetadata(newCareeName);
+              setCareeName(newCareeName);
+              setShowEditCareeNameModal(false);
+            }
+          } catch (error) {
+            // Silently handle errors
+            if (error instanceof Error && error.name === 'AbortError') {
+              return;
+            }
+          }
+        }}
+        initialValue={careeName}
+        title="Update care recipient name"
+        submitLabel="Update"
+      />
     </main>
   );
 }

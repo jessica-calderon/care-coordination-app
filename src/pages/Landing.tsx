@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Icons } from '../ui/icons';
 import type { NotebookIndex } from '../domain/notebook';
 import { generateNotebookDisplayName } from '../domain/notebook';
+import { createFirebaseAdapter } from '../storage';
 
 interface LandingProps {
   onStartNotebook: () => void
@@ -12,6 +14,31 @@ interface LandingProps {
 
 function Landing({ onStartNotebook, onSwitchNotebook, onCreateAnotherNotebook, notebookIndex }: LandingProps) {
   const hasNotebooks = notebookIndex.length > 0;
+  const [careeNames, setCareeNames] = useState<Record<string, string>>({});
+
+  // Load caree names for all notebooks
+  useEffect(() => {
+    const loadCareeNames = async () => {
+      const names: Record<string, string> = {};
+      await Promise.all(
+        notebookIndex.map(async (entry) => {
+          try {
+            const adapter = createFirebaseAdapter(entry.id);
+            const metadata = await adapter.getNotebookMetadata();
+            names[entry.id] = metadata.careeName;
+          } catch (error) {
+            // Silently handle errors - use fallback
+            names[entry.id] = 'Care recipient';
+          }
+        })
+      );
+      setCareeNames(names);
+    };
+
+    if (hasNotebooks) {
+      loadCareeNames();
+    }
+  }, [notebookIndex, hasNotebooks]);
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -32,7 +59,8 @@ function Landing({ onStartNotebook, onSwitchNotebook, onCreateAnotherNotebook, n
               </h2>
               <ul className="space-y-3 mb-6" role="list">
                 {notebookIndex.map((entry) => {
-                  const displayName = generateNotebookDisplayName(entry.id, notebookIndex);
+                  const careeName = careeNames[entry.id] || 'Care recipient';
+                  const displayName = `${careeName}'s notebook`;
                   return (
                     <li key={entry.id}>
                       <button
