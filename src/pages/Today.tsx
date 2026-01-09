@@ -3,10 +3,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { todayData } from '../mock/todayData';
 import type { CareNote, NotesByDate, Caretaker } from '../domain/types';
 import { getTodayDateKey, formatDateLabel, canEditNote } from '../domain/notebook';
-import { dataAdapter } from '../storage';
+import { useDataAdapter } from '../storage/DataAdapterContext';
 import { Icons } from '../ui/icons';
 
 function Today() {
+  const dataAdapter = useDataAdapter();
   const [notesByDate, setNotesByDate] = useState<NotesByDate>({});
   const [careNotes, setCareNotes] = useState<CareNote[]>([]);
   const [noteText, setNoteText] = useState('');
@@ -63,7 +64,7 @@ function Today() {
       }
       // Other errors are handled by global error handler
     }
-  }, []);
+  }, [dataAdapter]);
 
   // Load initial state from adapter
   useEffect(() => {

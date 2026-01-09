@@ -103,20 +103,33 @@ class HybridAdapter implements DataAdapter {
 }
 
 /**
+ * Create a data adapter for a specific notebook ID.
+ * @param notebookId The notebook ID to create an adapter for
+ * @returns A DataAdapter instance configured for the given notebook
+ */
+export function createDataAdapter(notebookId: string): DataAdapter {
+  if (import.meta.env.VITE_USE_API === 'true') {
+    return new ApiAdapter();
+  }
+  return new HybridAdapter(notebookId);
+}
+
+/**
  * Resolve notebook ID before adapter instantiation.
  * This ensures the notebookId is available at app initialization time.
+ * Returns null if no notebook is selected (for landing page).
  */
 const notebookId = resolveNotebookId();
 
 /**
- * Select adapter based on environment flag.
- * VITE_USE_API=true uses API adapter.
- * Otherwise uses HybridAdapter (Firebase reads with localStorage fallback and writes).
+ * Default adapter instance for backward compatibility.
+ * Uses the resolved notebook ID, or a fallback if none exists.
+ * Note: This adapter should be replaced with context-based adapter in App.tsx
+ * when multiple notebooks are in use.
  */
-export const dataAdapter =
-  import.meta.env.VITE_USE_API === 'true'
-    ? new ApiAdapter()
-    : new HybridAdapter(notebookId);
+export const dataAdapter = notebookId 
+  ? createDataAdapter(notebookId)
+  : createDataAdapter(''); // Fallback empty ID (will be replaced by App.tsx)
 
 /**
  * Helper function to create a FirebaseAdapter instance when notebookId is available.

@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import type { Caretaker } from '../domain/types';
-import { dataAdapter } from '../storage';
+import { useDataAdapter } from '../storage/DataAdapterContext';
 import { addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain } from '../domain/notebook';
 import { Icons } from '../ui/icons';
 
 function CareTeam() {
+  const dataAdapter = useDataAdapter();
   const [caretakers, setCaretakers] = useState<Caretaker[]>([]);
   const [currentCaregiver, setCurrentCaregiver] = useState<string>('');
   const [newCaretakerName, setNewCaretakerName] = useState('');
@@ -23,7 +24,7 @@ function CareTeam() {
       setCurrentCaregiver(todayState.currentCaregiver);
     };
     loadState();
-  }, []);
+  }, [dataAdapter]);
 
   const handleAddCaretaker = async () => {
     if (newCaretakerName.trim()) {

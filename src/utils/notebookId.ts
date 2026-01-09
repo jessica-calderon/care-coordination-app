@@ -1,9 +1,10 @@
 /**
  * Notebook ID utilities.
  * Handles generation, resolution, and persistence of notebook IDs.
+ * Supports multiple notebooks with a local index.
  */
 
-const STORAGE_KEY_NOTEBOOK_ID = 'care-app-notebook-id';
+import { getLastNotebookId, setLastNotebookId, addNotebookToIndex } from '../domain/notebook';
 
 /**
  * Generate a new opaque notebook ID using crypto.randomUUID().
@@ -26,7 +27,7 @@ export function generateNotebookId(): string {
  * Update the URL to include the notebook ID parameter without page reload.
  * @param notebookId The notebook ID to add to the URL
  */
-function updateUrlWithNotebookId(notebookId: string): void {
+export function updateUrlWithNotebookId(notebookId: string): void {
   if (typeof window === 'undefined') return;
 
   const url = new URL(window.location.href);
@@ -37,46 +38,75 @@ function updateUrlWithNotebookId(notebookId: string): void {
 }
 
 /**
- * Resolve notebook ID from URL parameter, localStorage, or generate a new one.
+ * Resolve notebook ID from URL parameter, last-used notebook, or return null.
  * Priority:
  * 1. URL parameter ?notebook=<id>
- * 2. localStorage value
- * 3. Generate new ID
+ * 2. Last-used notebook ID from localStorage
+ * 3. null (no auto-generation)
  * 
- * The resolved ID is persisted to localStorage and the URL is updated to show it.
- * @returns The resolved notebook ID
+ * The resolved ID is persisted as last-used and the URL is updated to show it.
+ * @returns The resolved notebook ID, or null if none found
  */
-export function resolveNotebookId(): string {
+export function resolveNotebookId(): string | null {
   // Check URL parameter first
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
     const urlNotebookId = params.get('notebook');
     if (urlNotebookId && urlNotebookId.trim().length > 0) {
       const trimmedId = urlNotebookId.trim();
-      // Persist URL notebook ID to localStorage
-      localStorage.setItem(STORAGE_KEY_NOTEBOOK_ID, trimmedId);
+      // Update last-used and add to index
+      setLastNotebookId(trimmedId);
+      addNotebookToIndex(trimmedId);
       return trimmedId;
     }
   }
 
-  // Check localStorage
-  if (typeof window !== 'undefined') {
-    const storedNotebookId = localStorage.getItem(STORAGE_KEY_NOTEBOOK_ID);
-    if (storedNotebookId && storedNotebookId.trim().length > 0) {
-      const trimmedId = storedNotebookId.trim();
-      // Update URL to show the notebook ID from localStorage
-      updateUrlWithNotebookId(trimmedId);
-      return trimmedId;
-    }
+  // Check last-used notebook
+  const lastNotebookId = getLastNotebookId();
+  if (lastNotebookId) {
+    // Update URL to show the last-used notebook ID
+    updateUrlWithNotebookId(lastNotebookId);
+    return lastNotebookId;
   }
 
-  // Generate new ID and persist it
+  // No notebook ID found - return null
+  // This allows the app to show the landing page for notebook selection
+  return null;
+}
+
+/**
+ * Create a new notebook and add it to the index.
+ * Generates a new ID, adds it to the index, sets it as last-used, and updates the URL.
+ * @returns The new notebook ID
+ */
+export function createNewNotebook(): string {
   const newNotebookId = generateNotebookId();
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_NOTEBOOK_ID, newNotebookId);
-    // Update URL to show the new notebook ID
-    updateUrlWithNotebookId(newNotebookId);
-  }
+  
+  // Add to index
+  addNotebookToIndex(newNotebookId);
+  
+  // Set as last-used
+  setLastNotebookId(newNotebookId);
+  
+  // Update URL
+  updateUrlWithNotebookId(newNotebookId);
+  
   return newNotebookId;
+}
+
+/**
+ * Switch to a different notebook.
+ * Updates the URL, sets as last-used, and ensures it's in the index.
+ * @param notebookId The notebook ID to switch to
+ */
+export function switchToNotebook(notebookId: string): void {
+  // Update URL
+  updateUrlWithNotebookId(notebookId);
+  
+  // Set as last-used
+  setLastNotebookId(notebookId);
+  
+  // Ensure it's in the index
+  addNotebookToIndex(notebookId);
 }
 

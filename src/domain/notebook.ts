@@ -350,4 +350,131 @@ export function createPrimaryContactChangedNote(name: string): CareNote {
   };
 }
 
+/**
+ * Notebook index types and utilities.
+ * Manages local index of known notebooks (client-side only, not stored in Firestore).
+ */
+
+export interface NotebookIndexEntry {
+  id: string;
+  name?: string; // Optional display name (future feature)
+}
+
+export type NotebookIndex = NotebookIndexEntry[];
+
+const STORAGE_KEY_NOTEBOOK_INDEX = 'care-app-notebook-index';
+const STORAGE_KEY_LAST_NOTEBOOK_ID = 'care-app-last-notebook-id';
+
+/**
+ * Read the local notebook index from localStorage.
+ * Returns empty array if index doesn't exist or is invalid.
+ */
+export function readNotebookIndex(): NotebookIndex {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_NOTEBOOK_INDEX);
+    if (!stored) return [];
+    
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    
+    // Validate entries have required id field
+    return parsed.filter((entry: unknown): entry is NotebookIndexEntry => 
+      typeof entry === 'object' && 
+      entry !== null && 
+      typeof (entry as NotebookIndexEntry).id === 'string' &&
+      (entry as NotebookIndexEntry).id.trim().length > 0
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Write the notebook index to localStorage.
+ */
+export function writeNotebookIndex(index: NotebookIndex): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    localStorage.setItem(STORAGE_KEY_NOTEBOOK_INDEX, JSON.stringify(index));
+  } catch (error) {
+    // Silently fail if localStorage is unavailable
+    console.warn('Failed to write notebook index:', error);
+  }
+}
+
+/**
+ * Add a notebook to the index (or update if it already exists).
+ * Returns the updated index.
+ */
+export function addNotebookToIndex(notebookId: string, name?: string): NotebookIndex {
+  const index = readNotebookIndex();
+  const existingIndex = index.findIndex(entry => entry.id === notebookId);
+  
+  if (existingIndex >= 0) {
+    // Update existing entry
+    const updated = [...index];
+    updated[existingIndex] = { id: notebookId, name };
+    writeNotebookIndex(updated);
+    return updated;
+  } else {
+    // Add new entry
+    const updated = [...index, { id: notebookId, name }];
+    writeNotebookIndex(updated);
+    return updated;
+  }
+}
+
+/**
+ * Get the last-used notebook ID from localStorage.
+ * Returns null if not set.
+ */
+export function getLastNotebookId(): string | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_LAST_NOTEBOOK_ID);
+    return stored && stored.trim().length > 0 ? stored.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Set the last-used notebook ID in localStorage.
+ */
+export function setLastNotebookId(notebookId: string): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    localStorage.setItem(STORAGE_KEY_LAST_NOTEBOOK_ID, notebookId);
+  } catch (error) {
+    // Silently fail if localStorage is unavailable
+    console.warn('Failed to set last notebook ID:', error);
+  }
+}
+
+/**
+ * Generate a fallback display name for a notebook.
+ * Uses a simple pattern like "Notebook 1", "Notebook 2", etc.
+ */
+export function generateNotebookDisplayName(notebookId: string, index: NotebookIndex): string {
+  // If notebook has a name, use it
+  const entry = index.find(e => e.id === notebookId);
+  if (entry?.name) {
+    return entry.name;
+  }
+  
+  // Otherwise, generate a fallback based on position in index
+  const position = index.findIndex(e => e.id === notebookId);
+  if (position >= 0) {
+    return `Notebook ${position + 1}`;
+  }
+  
+  // Fallback if not in index
+  return 'Care Notebook';
+}
+
 
