@@ -56,9 +56,6 @@ try {
   // Silently fail if Analytics cannot be initialized
   // This can happen in unsupported environments, SSR, or if Analytics is not available
   // No console error in production to avoid noise
-  if (import.meta.env.DEV) {
-    console.warn('Firebase Analytics initialization skipped:', error instanceof Error ? error.message : 'Unsupported environment');
-  }
   analytics = null;
 }
 

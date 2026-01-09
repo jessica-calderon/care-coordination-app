@@ -153,9 +153,19 @@ export function updateCareNote(note: CareNote, newNoteText: string): CareNote {
 }
 
 /**
+ * Generate a temporary ID for optimistic updates
+ * Real IDs will come from the adapter when persisted
+ */
+function generateTempId(): string {
+  // Use timestamp + random for uniqueness in optimistic updates
+  return `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
  * Add a caretaker to the list (pure function)
  * Returns a new array with the caretaker added if not already present
  * New caretakers are added as active and non-primary
+ * Generates a temporary ID for optimistic updates (real ID comes from adapter)
  */
 export function addCaretaker(caretakers: Caretaker[], name: string): Caretaker[] {
   const trimmedName = name.trim();
@@ -169,7 +179,12 @@ export function addCaretaker(caretakers: Caretaker[], name: string): Caretaker[]
   }
   // If this is the first caretaker, make them primary
   const isFirst = caretakers.length === 0;
-  return [...caretakers, { name: trimmedName, isPrimary: isFirst, isActive: true }];
+  return [...caretakers, { 
+    id: generateTempId(), // Temporary ID for optimistic updates
+    name: trimmedName, 
+    isPrimary: isFirst, 
+    isActive: true 
+  }];
 }
 
 /**

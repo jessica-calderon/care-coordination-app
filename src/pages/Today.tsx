@@ -10,8 +10,8 @@ function Today() {
   const [notesByDate, setNotesByDate] = useState<NotesByDate>({});
   const [careNotes, setCareNotes] = useState<CareNote[]>([]);
   const [noteText, setNoteText] = useState('');
-  const [lastUpdatedBy, setLastUpdatedBy] = useState(todayData.lastUpdatedBy);
-  const [currentCaregiver, setCurrentCaregiver] = useState(todayData.currentCaregiver);
+  const [lastUpdatedBy, setLastUpdatedBy] = useState('');
+  const [currentCaregiver, setCurrentCaregiver] = useState('');
   const [caretakers, setCaretakers] = useState<Caretaker[]>([]);
   const [selectedHandoffTarget, setSelectedHandoffTarget] = useState<string>('');
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
@@ -31,47 +31,17 @@ function Today() {
   // Load initial state from adapter
   useEffect(() => {
     const loadState = async () => {
-      const todayState = await dataAdapter.loadToday();
-      setCareNotes(todayState.careNotes);
-      setCurrentCaregiver(todayState.currentCaregiver);
-      setLastUpdatedBy(todayState.lastUpdatedBy);
-      const loadedCaretakers = todayState.caretakers || [];
-      setCaretakers(loadedCaretakers);
-      
-      // Initialize handoff target to first available active caretaker
-      const otherActiveCaretakers = loadedCaretakers.filter(c => 
-        c.isActive && c.name !== todayState.currentCaregiver
-      );
-      if (otherActiveCaretakers.length > 0) {
-        setSelectedHandoffTarget(otherActiveCaretakers[0].name);
-      }
-      
-      // Load notesByDate for history
-      const allNotes = await dataAdapter.getNotesByDate();
-      setNotesByDate(allNotes);
-      
-      // Initialize date ref
-      lastCheckedDateRef.current = getTodayDateKey();
-    };
-    loadState();
-  }, []);
-
-  // Check for date change on mount and periodically
-  useEffect(() => {
-    const checkDate = async () => {
-      const currentTodayKey = getTodayDateKey();
-      const lastDateKey = lastCheckedDateRef.current;
-      
-      if (lastDateKey && lastDateKey !== currentTodayKey) {
-        // Date changed - reload state from adapter
+      try {
         const todayState = await dataAdapter.loadToday();
         setCareNotes(todayState.careNotes);
         setCurrentCaregiver(todayState.currentCaregiver);
         setLastUpdatedBy(todayState.lastUpdatedBy);
-        const loadedCaretakers = todayState.caretakers || [];
+        
+        // Load caretakers from Firebase (authoritative source)
+        const loadedCaretakers = await dataAdapter.getCaretakers();
         setCaretakers(loadedCaretakers);
         
-        // Update handoff target to first available active caretaker
+        // Initialize handoff target to first available active caretaker
         const otherActiveCaretakers = loadedCaretakers.filter(c => 
           c.isActive && c.name !== todayState.currentCaregiver
         );
@@ -79,11 +49,61 @@ function Today() {
           setSelectedHandoffTarget(otherActiveCaretakers[0].name);
         }
         
-        // Reload notesByDate for history
+        // Load notesByDate for history
         const allNotes = await dataAdapter.getNotesByDate();
         setNotesByDate(allNotes);
         
-        lastCheckedDateRef.current = currentTodayKey;
+        // Initialize date ref
+        lastCheckedDateRef.current = getTodayDateKey();
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Other errors are handled by global error handler
+      }
+    };
+    loadState();
+  }, []);
+
+  // Check for date change on mount and periodically
+  useEffect(() => {
+    const checkDate = async () => {
+      try {
+        const currentTodayKey = getTodayDateKey();
+        const lastDateKey = lastCheckedDateRef.current;
+        
+        if (lastDateKey && lastDateKey !== currentTodayKey) {
+          // Date changed - reload state from adapter
+          const todayState = await dataAdapter.loadToday();
+          setCareNotes(todayState.careNotes);
+          setCurrentCaregiver(todayState.currentCaregiver);
+          setLastUpdatedBy(todayState.lastUpdatedBy);
+          
+          // Load caretakers from Firebase (authoritative source)
+          const loadedCaretakers = await dataAdapter.getCaretakers();
+          setCaretakers(loadedCaretakers);
+          
+          // Update handoff target to first available active caretaker
+          const otherActiveCaretakers = loadedCaretakers.filter(c => 
+            c.isActive && c.name !== todayState.currentCaregiver
+          );
+          if (otherActiveCaretakers.length > 0) {
+            setSelectedHandoffTarget(otherActiveCaretakers[0].name);
+          }
+          
+          // Reload notesByDate for history
+          const allNotes = await dataAdapter.getNotesByDate();
+          setNotesByDate(allNotes);
+          
+          lastCheckedDateRef.current = currentTodayKey;
+        }
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Other errors are handled by global error handler
       }
     };
     
@@ -117,56 +137,76 @@ function Today() {
 
   const handleAddNote = async () => {
     if (noteText.trim()) {
-      // Use adapter to add note
-      const newNote = await dataAdapter.addNote(noteText.trim());
-      
-      // Update UI state
-      setCareNotes([newNote, ...careNotes]);
-      setNoteText('');
-      
-      // Reload notesByDate to keep history in sync
-      const allNotes = await dataAdapter.getNotesByDate();
-      setNotesByDate(allNotes);
+      try {
+        // Use adapter to add note
+        const newNote = await dataAdapter.addNote(noteText.trim());
+        
+        // Update UI state
+        setCareNotes([newNote, ...careNotes]);
+        setNoteText('');
+        
+        // Reload notesByDate to keep history in sync
+        const allNotes = await dataAdapter.getNotesByDate();
+        setNotesByDate(allNotes);
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Other errors are handled by global error handler
+      }
     }
   };
 
   const handleHandoff = async () => {
-    // Use selected target caregiver, or fallback to first available active caretaker
+    // Use selected target caregiver, or first available active caretaker
     const otherActiveCaretakers = caretakers.filter(c => 
       c.isActive && c.name !== currentCaregiver
     );
-    let targetCaregiver: string;
     
+    if (otherActiveCaretakers.length === 0) {
+      // No other active caretakers available - cannot handoff
+      return;
+    }
+    
+    let targetCaregiver: string;
     if (selectedHandoffTarget && otherActiveCaretakers.some(c => c.name === selectedHandoffTarget)) {
       targetCaregiver = selectedHandoffTarget;
-    } else if (otherActiveCaretakers.length > 0) {
-      targetCaregiver = otherActiveCaretakers[0].name;
     } else {
-      // Fallback to default behavior if no other active caretakers
-      targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+      targetCaregiver = otherActiveCaretakers[0].name;
     }
     
-    await dataAdapter.handoff(targetCaregiver);
-    
-    // Reload state from adapter
-    const todayState = await dataAdapter.loadToday();
-    setCareNotes(todayState.careNotes);
-    setCurrentCaregiver(todayState.currentCaregiver);
-    setLastUpdatedBy(todayState.lastUpdatedBy);
-    const updatedCaretakers = todayState.caretakers || [];
-    setCaretakers(updatedCaretakers);
-    
-    // Update handoff target to first available active caretaker after handoff
-    const newOtherActiveCaretakers = updatedCaretakers.filter(c => 
-      c.isActive && c.name !== todayState.currentCaregiver
-    );
-    if (newOtherActiveCaretakers.length > 0) {
-      setSelectedHandoffTarget(newOtherActiveCaretakers[0].name);
+    try {
+      await dataAdapter.handoff(targetCaregiver);
+      
+      // Reload state from adapter
+      const todayState = await dataAdapter.loadToday();
+      setCareNotes(todayState.careNotes);
+      setCurrentCaregiver(todayState.currentCaregiver);
+      setLastUpdatedBy(todayState.lastUpdatedBy);
+      
+      // Load caretakers from Firebase (authoritative source)
+      const updatedCaretakers = await dataAdapter.getCaretakers();
+      setCaretakers(updatedCaretakers);
+      
+      // Update handoff target to first available active caretaker after handoff
+      const newOtherActiveCaretakers = updatedCaretakers.filter(c => 
+        c.isActive && c.name !== todayState.currentCaregiver
+      );
+      if (newOtherActiveCaretakers.length > 0) {
+        setSelectedHandoffTarget(newOtherActiveCaretakers[0].name);
+      }
+      
+      // Reload notesByDate for history
+      const allNotes = await dataAdapter.getNotesByDate();
+      setNotesByDate(allNotes);
+    } catch (error) {
+      // Silently handle AbortError - request was cancelled
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      // Other errors are handled by global error handler
     }
-    
-    // Reload notesByDate for history
-    const allNotes = await dataAdapter.getNotesByDate();
-    setNotesByDate(allNotes);
   };
 
 
@@ -182,21 +222,29 @@ function Today() {
 
   const handleSaveEdit = async (noteIndex: number) => {
     if (editingNoteText.trim()) {
-      // Use adapter to update note
-      const updatedNote = await dataAdapter.updateNote(noteIndex, editingNoteText.trim());
-      
-      // Update UI state
-      const updatedNotes = [...careNotes];
-      updatedNotes[noteIndex] = updatedNote;
-      setCareNotes(updatedNotes);
-      
-      // Reload notesByDate to keep history in sync
-      const allNotes = await dataAdapter.getNotesByDate();
-      setNotesByDate(allNotes);
-      
-      // Reset editing state
-      setEditingNoteIndex(null);
-      setEditingNoteText('');
+      try {
+        // Use adapter to update note
+        const updatedNote = await dataAdapter.updateNote(noteIndex, editingNoteText.trim());
+        
+        // Update UI state
+        const updatedNotes = [...careNotes];
+        updatedNotes[noteIndex] = updatedNote;
+        setCareNotes(updatedNotes);
+        
+        // Reload notesByDate to keep history in sync
+        const allNotes = await dataAdapter.getNotesByDate();
+        setNotesByDate(allNotes);
+        
+        // Reset editing state
+        setEditingNoteIndex(null);
+        setEditingNoteText('');
+      } catch (error) {
+        // Silently handle AbortError - request was cancelled
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Other errors are handled by global error handler
+      }
     }
   };
 
@@ -518,29 +566,13 @@ function Today() {
               );
               
               if (otherActiveCaretakers.length === 0) {
-                // Fallback to default behavior if no other active caretakers
-                const targetCaregiver = currentCaregiver === 'Lupe' ? 'Maria' : 'Lupe';
+                // No other active caretakers available - disable handoff
                 return (
-                  <button
-                    type="button"
-                    onClick={handleHandoff}
-                    className="mt-4 px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
-                    style={{ 
-                      color: 'var(--button-secondary-text)',
-                      backgroundColor: 'var(--button-secondary-bg)',
-                      '--tw-ring-color': 'var(--focus-ring)',
-                    } as React.CSSProperties}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
-                    }}
-                    aria-label={`Hand off care to ${targetCaregiver}`}
-                  >
-                    <FontAwesomeIcon icon={Icons.handoff} className="mr-2 opacity-70" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-                    Hand off care to {targetCaregiver}
-                  </button>
+                  <div className="mt-4">
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                      No other active caretakers available for handoff.
+                    </p>
+                  </div>
                 );
               }
               
@@ -592,7 +624,7 @@ function Today() {
                       aria-label="Select caregiver to hand off care to"
                     >
                       {otherActiveCaretakers.map((caretaker) => (
-                        <option key={caretaker.name} value={caretaker.name}>
+                        <option key={caretaker.id} value={caretaker.name}>
                           {caretaker.name}
                         </option>
                       ))}
@@ -663,7 +695,7 @@ function Today() {
                       {entry.notes.map((note, index) => {
                         const noteWithAuthor = {
                           ...note,
-                          author: note.author || 'Lupe'
+                          author: note.author || 'Unknown'
                         };
                         // Parse time string (e.g., "8:30 AM" or "2:00 PM") to datetime
                         const parseTime = (timeStr: string, dateKey: string): string => {

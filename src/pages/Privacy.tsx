@@ -12,11 +12,11 @@ function Privacy() {
           </p>
           
           <h2 className="text-xl font-normal mt-8 mb-4" style={{ color: 'var(--text-primary)' }}>
-            Stored only on your device
+            Secure cloud storage
           </h2>
           
           <p>
-            All care notes, tasks, and care team information stay on your device only. Nothing is sent to any server, cloud service, or third party. (Technically, this uses your browser's local storage feature.)
+            All care notes, tasks, and care team information are securely stored in Firebase. Your data is encrypted in transit and at rest, and is accessible only to those who have access to your care notebook.
           </p>
           
           <h2 className="text-xl font-normal mt-8 mb-4" style={{ color: 'var(--text-primary)' }}>
@@ -40,13 +40,13 @@ function Privacy() {
           </h2>
           
           <p>
-            Since all data stays on your device only, you have complete control. You can:
+            Your data is stored securely in the cloud, which means you can:
           </p>
           
           <ul className="space-y-2 ml-4 list-disc" style={{ color: 'var(--text-secondary)' }}>
-            <li>Clear your browser data to remove all care notes</li>
-            <li>Export or backup data by accessing your browser's developer tools</li>
-            <li>Use the app on multiple devices, but note that data won't sync between them</li>
+            <li>Access your care notebook from any device with the notebook link</li>
+            <li>Share access with family members and care team members</li>
+            <li>Keep your data synchronized across all devices</li>
           </ul>
           
           <h2 className="text-xl font-normal mt-8 mb-4" style={{ color: 'var(--text-primary)' }}>
@@ -55,21 +55,21 @@ function Privacy() {
           
           <div className="space-y-3">
             <p>
-              <strong style={{ color: 'var(--text-primary)' }}>Device-specific:</strong> Data stored on one device won't automatically appear on another. Each device maintains its own separate care notebook.
+              <strong style={{ color: 'var(--text-primary)' }}>Cloud-synced:</strong> Your data is stored securely in Firebase and automatically syncs across all devices where you access your care notebook.
             </p>
             
             <p>
-              <strong style={{ color: 'var(--text-primary)' }}>Browser data:</strong> If you clear your browser's stored data or use private/incognito mode, your care notes will be cleared.
+              <strong style={{ color: 'var(--text-primary)' }}>Notebook access:</strong> Access to your care notebook is controlled through the notebook link. Anyone with the link can view and edit the notebook.
             </p>
             
             <p>
-              <strong style={{ color: 'var(--text-primary)' }}>Shared devices:</strong> If multiple people use the same device and browser, they'll share the same care notebook data.
+              <strong style={{ color: 'var(--text-primary)' }}>Data security:</strong> Your data is encrypted in transit and at rest using Firebase's security infrastructure.
             </p>
           </div>
           
           <div className="mt-8 p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--text-secondary)' }}>Questions?</strong> If you have questions about privacy or how your data is handled, please review your browser's documentation on localStorage and local data storage.
+              <strong style={{ color: 'var(--text-secondary)' }}>Questions?</strong> If you have questions about privacy or how your data is handled, please review Firebase's privacy and security documentation.
             </p>
           </div>
         </div>

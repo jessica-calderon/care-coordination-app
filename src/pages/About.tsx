@@ -25,13 +25,13 @@ function About() {
           
           <ul className="space-y-3 ml-4 list-disc" style={{ color: 'var(--text-secondary)' }}>
             <li>Requires no accounts or setup</li>
-            <li>Keeps all data local to your device</li>
+            <li>Securely syncs data across all your devices</li>
             <li>Focuses on what matters today</li>
             <li>Reduces complexity, not adds to it</li>
           </ul>
           
           <p className="mt-6">
-            Care Notebook is designed for families who need a shared space to coordinate care, without the overhead of complex systems or privacy concerns of cloud services.
+            Care Notebook is designed for families who need a shared space to coordinate care, with secure cloud storage that keeps your data accessible and synchronized.
           </p>
         </div>
       </section>
@@ -40,4 +40,7 @@ function About() {
 }
 
 export default About;
+
+
+
 

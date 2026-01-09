@@ -39,7 +39,7 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
               // Brand mode: Not clickable, no arrow, notebook icon
               <div className="text-base inline-flex items-center" style={{ color: 'var(--text-secondary)' }}>
                 <FontAwesomeIcon icon={Icons.brand} className="mr-2 opacity-55" style={{ fontSize: '0.8em' }} aria-hidden="true" />
-                <span>Care notebook</span>
+                <span>Care Notebook</span>
               </div>
             ) : (
               // Back mode: Clickable, arrow icon, navigation affordance
@@ -54,7 +54,7 @@ function AppShell({ children, onNavigateHome, onNavigateCareTeam, onNavigateBack
                 aria-label={isCareTeam ? "Navigate back to Today" : isInfoPage ? "Navigate to home page" : "Navigate to home page"}
               >
                 <FontAwesomeIcon icon={Icons.back} className="mr-2 opacity-60" style={{ fontSize: '0.85em' }} aria-hidden="true" />
-                <span>Care notebook</span>
+                <span>Care Notebook</span>
               </button>
             )}
           </div>

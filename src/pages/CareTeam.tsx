@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import type { Caretaker } from '../domain/types';
 import { dataAdapter } from '../storage';
+import { addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretakerDomain, restoreCaretaker as restoreCaretakerDomain, setPrimaryCaretaker as setPrimaryCaretakerDomain } from '../domain/notebook';
 import { Icons } from '../ui/icons';
 
 function CareTeam() {
@@ -12,10 +13,14 @@ function CareTeam() {
   // Load initial state
   useEffect(() => {
     const loadState = async () => {
+      // Load caretakers directly from Firebase (authoritative source)
+      // CARETAKERS CANONICAL LOCATION: /notebooks/{notebookId}/caretakers collection
+      const loadedCaretakers = await dataAdapter.getCaretakers();
+      setCaretakers(loadedCaretakers);
+      
+      // Load current caregiver from today state
       const todayState = await dataAdapter.loadToday();
       setCurrentCaregiver(todayState.currentCaregiver);
-      const loadedCaretakers = todayState.caretakers || [];
-      setCaretakers(loadedCaretakers);
     };
     loadState();
   }, []);
@@ -23,31 +28,80 @@ function CareTeam() {
   const handleAddCaretaker = async () => {
     if (newCaretakerName.trim()) {
       try {
-        await dataAdapter.addCaretaker(newCaretakerName.trim());
-        setNewCaretakerName('');
+        const trimmedName = newCaretakerName.trim();
         
-        // Reload state from adapter
+        // Optimistically update UI using domain function
+        const optimisticCaretakers = addCaretakerDomain(caretakers, trimmedName);
+        const wasAdded = optimisticCaretakers.length > caretakers.length;
+        
+        if (wasAdded) {
+          setCaretakers(optimisticCaretakers);
+          setNewCaretakerName('');
+        }
+        
+        // Write to Firebase
+        await dataAdapter.addCaretaker(trimmedName);
+        
+        // Re-fetch from Firebase to ensure consistency
+        const updatedCaretakers = await dataAdapter.getCaretakers();
+        
+        // Verify the new caretaker is in the re-fetched data
+        // If not, keep the optimistic update (handles race conditions)
+        const hasNewCaretaker = updatedCaretakers.some(
+          c => c.name.toLowerCase() === trimmedName.toLowerCase()
+        );
+        
+        if (hasNewCaretaker || updatedCaretakers.length >= optimisticCaretakers.length) {
+          // Re-fetch succeeded and has the new caretaker, or has at least as many
+          setCaretakers(updatedCaretakers);
+        } else if (wasAdded) {
+          // Re-fetch doesn't have the new caretaker yet, keep optimistic update
+          // This can happen due to Firestore eventual consistency
+          // Keep the optimistic state - it will sync on next page load or refresh
+        }
+        
+        // Reload current caregiver from today state
         const todayState = await dataAdapter.loadToday();
-        const updatedCaretakers = todayState.caretakers || [];
-        setCaretakers(updatedCaretakers);
         setCurrentCaregiver(todayState.currentCaregiver);
       } catch (error) {
+        // On error, revert to Firebase state
+        if (error instanceof Error && error.name === 'AbortError') {
+          // Ignore AbortError - request was cancelled
+          return;
+        }
+        const updatedCaretakers = await dataAdapter.getCaretakers();
+        setCaretakers(updatedCaretakers);
         // Silently handle errors (e.g., duplicate caretaker)
-        console.error('Failed to add caretaker:', error);
       }
     }
   };
 
   const handleArchiveCaretaker = async (name: string) => {
     try {
+      // Optimistically update UI using domain function
+      const { caretakers: optimisticCaretakers, canArchive } = archiveCaretakerDomain(caretakers, name, currentCaregiver);
+      if (canArchive) {
+        setCaretakers(optimisticCaretakers);
+      }
+      
+      // Write to Firebase
       await dataAdapter.archiveCaretaker(name);
       
-      // Reload state from adapter
-      const todayState = await dataAdapter.loadToday();
-      const updatedCaretakers = todayState.caretakers || [];
+      // Re-fetch from Firebase to ensure consistency
+      const updatedCaretakers = await dataAdapter.getCaretakers();
       setCaretakers(updatedCaretakers);
+      
+      // Reload current caregiver from today state
+      const todayState = await dataAdapter.loadToday();
       setCurrentCaregiver(todayState.currentCaregiver);
     } catch (error) {
+      // Handle AbortError - request was cancelled
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      // On error, revert to Firebase state
+      const updatedCaretakers = await dataAdapter.getCaretakers();
+      setCaretakers(updatedCaretakers);
       // Show error message (e.g., trying to archive primary or current caregiver)
       alert(error instanceof Error ? error.message : 'Cannot archive this caregiver');
     }
@@ -55,14 +109,30 @@ function CareTeam() {
 
   const handleRestoreCaretaker = async (name: string) => {
     try {
+      // Optimistically update UI using domain function
+      const { caretakers: optimisticCaretakers, canRestore } = restoreCaretakerDomain(caretakers, name);
+      if (canRestore) {
+        setCaretakers(optimisticCaretakers);
+      }
+      
+      // Write to Firebase
       await dataAdapter.restoreCaretaker(name);
       
-      // Reload state from adapter
-      const todayState = await dataAdapter.loadToday();
-      const updatedCaretakers = todayState.caretakers || [];
+      // Re-fetch from Firebase to ensure consistency
+      const updatedCaretakers = await dataAdapter.getCaretakers();
       setCaretakers(updatedCaretakers);
+      
+      // Reload current caregiver from today state
+      const todayState = await dataAdapter.loadToday();
       setCurrentCaregiver(todayState.currentCaregiver);
     } catch (error) {
+      // Handle AbortError - request was cancelled
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      // On error, revert to Firebase state
+      const updatedCaretakers = await dataAdapter.getCaretakers();
+      setCaretakers(updatedCaretakers);
       // Show error message
       alert(error instanceof Error ? error.message : 'Cannot restore this caregiver');
     }
@@ -70,21 +140,42 @@ function CareTeam() {
 
   const handleSetPrimaryCaretaker = async (name: string) => {
     try {
+      // Optimistically update UI using domain function
+      const { caretakers: optimisticCaretakers, canSetPrimary } = setPrimaryCaretakerDomain(caretakers, name);
+      if (canSetPrimary) {
+        setCaretakers(optimisticCaretakers);
+      }
+      
+      // Write to Firebase
       await dataAdapter.setPrimaryCaretaker(name);
       
-      // Reload state from adapter
-      const todayState = await dataAdapter.loadToday();
-      const updatedCaretakers = todayState.caretakers || [];
+      // Re-fetch from Firebase to ensure consistency
+      const updatedCaretakers = await dataAdapter.getCaretakers();
       setCaretakers(updatedCaretakers);
+      
+      // Reload current caregiver from today state
+      const todayState = await dataAdapter.loadToday();
       setCurrentCaregiver(todayState.currentCaregiver);
     } catch (error) {
+      // Handle AbortError - request was cancelled
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      // On error, revert to Firebase state
+      const updatedCaretakers = await dataAdapter.getCaretakers();
+      setCaretakers(updatedCaretakers);
       // Show error message
       alert(error instanceof Error ? error.message : 'Cannot set this caregiver as primary');
     }
   };
 
-  const activeCaretakers = caretakers.filter(c => c.isActive);
-  const inactiveCaretakers = caretakers.filter(c => !c.isActive);
+  const activeCaretakers = useMemo(() => {
+    return caretakers.filter(c => c.isActive);
+  }, [caretakers]);
+  
+  const inactiveCaretakers = useMemo(() => {
+    return caretakers.filter(c => !c.isActive);
+  }, [caretakers]);
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -114,7 +205,7 @@ function CareTeam() {
                 const canSetPrimary = !isPrimary;
                 
                 return (
-                  <li key={caretaker.name} className="flex items-center justify-between gap-3 py-3 px-4 border rounded-lg" style={{ borderColor: 'var(--border-color)' }} role="listitem">
+                  <li key={caretaker.id} className="flex items-center justify-between gap-3 py-3 px-4 border rounded-lg" style={{ borderColor: 'var(--border-color)' }} role="listitem">
                     <div className="flex items-center gap-2 flex-1">
                       {isPrimary && (
                         <span className="text-base" aria-label="Primary contact" title="Primary contact">
@@ -192,7 +283,7 @@ function CareTeam() {
             <ul className="space-y-2" role="list" aria-label="List of inactive caretakers">
               {inactiveCaretakers.map((caretaker) => {
                 return (
-                  <li key={caretaker.name} className="flex items-center justify-between gap-3 py-3 px-4 border rounded-lg" style={{ borderColor: 'var(--border-color)' }} role="listitem">
+                  <li key={caretaker.id} className="flex items-center justify-between gap-3 py-3 px-4 border rounded-lg" style={{ borderColor: 'var(--border-color)' }} role="listitem">
                     <div className="flex items-center gap-2 flex-1">
                       <span className="text-base" style={{ color: 'var(--text-muted)' }}>
                         {caretaker.name}

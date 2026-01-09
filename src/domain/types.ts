@@ -17,6 +17,7 @@ export interface Task {
 }
 
 export interface Caretaker {
+  id: string;          // NEW — canonical identity
   name: string;
   isPrimary: boolean;
   isActive: boolean;
@@ -27,7 +28,6 @@ export interface TodayState {
   tasks: Task[];
   lastUpdatedBy: string;
   currentCaregiver: string;
-  caretakers: Caretaker[];
 }
 
 /**

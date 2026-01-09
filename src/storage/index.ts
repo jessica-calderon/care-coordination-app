@@ -1,7 +1,7 @@
 /**
  * Adapter selection layer.
  * Exports a single dataAdapter instance based on environment configuration.
- * Defaults to localStorageAdapter to maintain existing behavior.
+ * Defaults to HybridAdapter (Firebase with localStorage fallback) for cloud storage.
  */
 
 import type { DataAdapter } from './DataAdapter';
@@ -12,9 +12,9 @@ import { FirebaseAdapter } from './FirebaseAdapter';
 import { resolveNotebookId } from '../utils/notebookId';
 
 /**
- * Hybrid adapter that tries Firebase first, then falls back to localStorage.
+ * Hybrid adapter that uses Firebase as the primary storage.
  * This makes Firebase the authoritative source for reads when data exists,
- * while maintaining localStorage as a fallback for local-only users.
+ * while maintaining localStorage as a fallback for offline scenarios.
  */
 class HybridAdapter implements DataAdapter {
   private firebaseAdapter: FirebaseAdapter;
@@ -26,17 +26,11 @@ class HybridAdapter implements DataAdapter {
   }
 
   /**
-   * Load today's data from Firebase first, fallback to localStorage if not found.
+   * Load today's data from Firebase.
+   * HybridAdapter is now a thin pass-through to FirebaseAdapter.
    */
   async loadToday(): Promise<TodayState> {
-    // Try Firebase first
-    const firebaseResult = await this.firebaseAdapter.loadTodayInternal();
-    if (firebaseResult !== null) {
-      // Firebase has data - use it
-      return firebaseResult;
-    }
-    // Firebase has no data - fallback to localStorage
-    return this.localStorageAdapter.loadToday();
+    return this.firebaseAdapter.loadToday();
   }
 
   /**
@@ -70,23 +64,41 @@ class HybridAdapter implements DataAdapter {
   }
 
   async addCaretaker(name: string): Promise<void> {
-    return this.localStorageAdapter.addCaretaker(name);
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.addCaretaker(name);
   }
 
   async archiveCaretaker(name: string): Promise<void> {
-    return this.localStorageAdapter.archiveCaretaker(name);
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.archiveCaretaker(name);
   }
 
   async restoreCaretaker(name: string): Promise<void> {
-    return this.localStorageAdapter.restoreCaretaker(name);
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.restoreCaretaker(name);
   }
 
   async setPrimaryCaretaker(name: string): Promise<void> {
-    return this.localStorageAdapter.setPrimaryCaretaker(name);
+    // Route to FirebaseAdapter - it handles Firestore writes and localStorage caching
+    return this.firebaseAdapter.setPrimaryCaretaker(name);
   }
 
   async getCaretakers(): Promise<Caretaker[]> {
-    return this.localStorageAdapter.getCaretakers();
+    // CARETAKERS CANONICAL LOCATION: /notebooks/{notebookId}/caretakers collection
+    // NO FALLBACK to localStorage - Firebase is the single authoritative source
+    try {
+      const caretakers = await this.firebaseAdapter.getCaretakers();
+      return caretakers; // Return empty array if no caretakers exist (no fallback)
+    } catch (error) {
+      // If Firebase fails, silently return empty array
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Ignore AbortError - request was cancelled
+        return [];
+      }
+      // Return empty array instead of falling back to localStorage
+      // This enforces Firebase as the single authoritative source
+      return [];
+    }
   }
 }
 
