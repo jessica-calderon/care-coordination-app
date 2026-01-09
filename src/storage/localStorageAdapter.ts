@@ -174,6 +174,16 @@ function saveCaretakers(caretakers: Caretaker[]): void {
 }
 
 export class LocalStorageAdapter implements DataAdapter {
+  private notebookId: string;
+
+  /**
+   * Create a new LocalStorageAdapter instance.
+   * @param notebookId The unique identifier for the care notebook
+   */
+  constructor(notebookId: string) {
+    this.notebookId = notebookId;
+  }
+
   /**
    * Load today's complete state
    */
