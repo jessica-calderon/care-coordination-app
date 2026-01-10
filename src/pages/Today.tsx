@@ -636,7 +636,13 @@ function Today() {
             </button>
           </h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Current caregiver: <span className="font-medium" style={{ color: 'var(--text-secondary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
+            {currentCaregiver ? (
+              <>
+                Current caregiver: <span className="font-medium" style={{ color: 'var(--text-secondary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
+              </>
+            ) : (
+              <span style={{ color: 'var(--text-secondary)' }}>No current caregiver set yet.</span>
+            )}
           </p>
         </header>
 
@@ -738,11 +744,8 @@ function Today() {
           <div id="care-notes-content" className={isCareNotesExpanded ? '' : 'hidden'}>
           {careNotes.length === 0 ? (
             <div className="py-6" role="status" aria-live="polite">
-              <p className="text-base mb-2" style={{ color: 'var(--text-secondary)' }}>
-                No notes yet today
-              </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                When you add a note, it will appear here for everyone caring for {careeName}.
+              <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                Nothing has been added for today yet.
               </p>
             </div>
           ) : (
@@ -763,7 +766,7 @@ function Today() {
                     </h3>
                     {entry.notes.length === 0 ? (
                       <p className="text-sm py-2" style={{ color: 'var(--text-muted)' }}>
-                        No notes for this day.
+                        No entries yet.
                       </p>
                     ) : (
                       <div className="space-y-4">
@@ -1201,10 +1204,7 @@ function Today() {
                 ) : tasks.length === 0 ? (
                   <div className="py-2" role="status">
                     <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
-                      No upcoming tasks added yet.
-                    </p>
-                    <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                      Use the form above to add reminders for follow-up care, medications, appointments, or anything that needs to happen next.
+                      No tasks yet.
                     </p>
                   </div>
                 ) : null}
@@ -1259,9 +1259,15 @@ function Today() {
                   );
                 }
               })()}
-              <p>
-                Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver || 'not set'}`}>{currentCaregiver || 'not set'}</span>
-              </p>
+              {currentCaregiver ? (
+                <p>
+                  Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver}`}>{currentCaregiver}</span>
+                </p>
+              ) : (
+                <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                  No current caregiver set yet.
+                </p>
+              )}
               {(() => {
                 // Get available active caretakers for handoff (exclude current)
                 const otherActiveCaretakers = caretakers.filter(c => 
@@ -1436,7 +1442,7 @@ function Today() {
                       </button>
                       {entry.notes.length === 0 ? (
                         <p className="text-sm py-2" style={{ color: 'var(--text-muted)' }}>
-                          No notes for this day.
+                          No entries yet.
                         </p>
                       ) : (
                         <ul 
@@ -1448,7 +1454,7 @@ function Today() {
                         {entry.notes.map((note, index) => {
                         const noteWithAuthor = {
                           ...note,
-                          author: note.author || 'Unknown'
+                          author: note.author || 'System'
                         };
                         // Parse time string (e.g., "8:30 AM" or "2:00 PM") to datetime
                         const parseTime = (timeStr: string, dateKey: string): string => {

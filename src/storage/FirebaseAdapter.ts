@@ -1527,41 +1527,52 @@ export class FirebaseAdapter implements DataAdapter {
   }
 
   /**
-   * Get notebook metadata from Firestore.
-   * Returns metadata with careeName, or fallback to "Care recipient" if not found.
-   * @returns Notebook metadata
+   * Set notebook metadata in Firestore.
+   * Writes to /notebooks/{notebookId}/metadata/info.
+   * Quota-aware: checks if metadata already exists before writing to prevent quota spam.
+   * @param data The notebook metadata to write
    */
-  async getNotebookMetadata(): Promise<NotebookMetadata> {
+  async setNotebookMetadata(data: { careeName: string; createdAt: number }): Promise<void> {
+    const ref = doc(
+      firestore,
+      'notebooks',
+      this.notebookId,
+      'metadata',
+      'info'
+    );
+
     try {
-      const notebookRef = doc(firestore, 'notebooks', this.notebookId);
-      const snap = await getDoc(notebookRef);
-      
-      if (snap.exists()) {
-        const data = snap.data();
-        return {
-          careeName: data.careeName || 'Care recipient',
-          createdAt: data.createdAt || Timestamp.now(),
-          lastOpenedAt: data.lastOpenedAt || Timestamp.now()
-        };
+      // First check if metadata already exists
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        return; // DO NOT rewrite (prevents quota spam)
       }
-      
-      // Notebook doesn't exist - return fallback
-      return {
-        careeName: 'Care recipient',
-        createdAt: Timestamp.now(),
-        lastOpenedAt: Timestamp.now()
-      };
-    } catch (error) {
-      // Silently handle errors - return fallback
-      if (error instanceof Error && error.name === 'AbortError') {
-        // Ignore AbortError - request was cancelled
+
+      await setDoc(ref, data, { merge: true });
+    } catch (error: any) {
+      if (error?.code === 'resource-exhausted') {
+        console.warn('Firestore quota exceeded — falling back to local cache');
+        throw error; // allow caller to fallback
       }
-      return {
-        careeName: 'Care recipient',
-        createdAt: Timestamp.now(),
-        lastOpenedAt: Timestamp.now()
-      };
+      throw error;
     }
+  }
+
+  /**
+   * Get notebook metadata from Firestore.
+   * Reads from /notebooks/{notebookId}/metadata/info.
+   * MUST throw if metadata not found - no silent fallbacks.
+   * @returns Notebook metadata with careeName
+   */
+  async getNotebookMetadata(): Promise<{ careeName: string }> {
+    const ref = doc(firestore, 'notebooks', this.notebookId, 'metadata', 'info');
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      throw new Error('Notebook metadata not found');
+    }
+
+    return snap.data() as { careeName: string };
   }
 
   /**

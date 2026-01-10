@@ -8,12 +8,12 @@ import { addCaretaker as addCaretakerDomain, archiveCaretaker as archiveCaretake
 import { Icons } from '../ui/icons';
 import { Spinner } from '../components/Spinner';
 import { InlineSpinner } from '../components/InlineSpinner';
+import AddCaretakerModal from '../components/AddCaretakerModal';
 
 function CareTeam() {
   const dataAdapter = useDataAdapter();
   const [caretakers, setCaretakers] = useState<Caretaker[]>([]);
   const [currentCaregiver, setCurrentCaregiver] = useState<string>('');
-  const [newCaretakerName, setNewCaretakerName] = useState('');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isAddingCaretaker, setIsAddingCaretaker] = useState(false);
   const [archivingCaretaker, setArchivingCaretaker] = useState<string | null>(null);
@@ -23,6 +23,7 @@ function CareTeam() {
   const [editingCaretakerId, setEditingCaretakerId] = useState<string | null>(null);
   const [editingCaretakerName, setEditingCaretakerName] = useState<string>('');
   const [updatingCaretakerName, setUpdatingCaretakerName] = useState<string | null>(null);
+  const [showAddCaretakerModal, setShowAddCaretakerModal] = useState(false);
   const hasLoadedRef = useRef(false);
 
   const handleStartEditCaretaker = (caretaker: Caretaker) => {
@@ -104,11 +105,11 @@ function CareTeam() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally empty - only run once on mount
 
-  const handleAddCaretaker = async () => {
-    if (newCaretakerName.trim() && !isAddingCaretaker) {
+  const handleAddCaretaker = async (name: string) => {
+    if (name.trim() && !isAddingCaretaker) {
       try {
         setIsAddingCaretaker(true);
-        const trimmedName = newCaretakerName.trim();
+        const trimmedName = name.trim();
         
         // Optimistically update UI using domain function
         const optimisticCaretakers = addCaretakerDomain(caretakers, trimmedName);
@@ -116,7 +117,6 @@ function CareTeam() {
         
         if (wasAdded) {
           setCaretakers(optimisticCaretakers);
-          setNewCaretakerName('');
         }
         
         // Write to Firebase
@@ -143,6 +143,9 @@ function CareTeam() {
         // Reload current caregiver from today state
         const todayState = await dataAdapter.loadToday();
         setCurrentCaregiver(todayState.currentCaregiver);
+        
+        // Close modal after successful addition
+        setShowAddCaretakerModal(false);
       } catch (error) {
         // On error, revert to Firebase state
         if (error instanceof Error && error.name === 'AbortError') {
@@ -153,6 +156,7 @@ function CareTeam() {
         setCaretakers(updatedCaretakers);
         // Silently handle errors (e.g., duplicate caretaker)
       } finally {
+        // Always reset loading state, regardless of success or failure
         setIsAddingCaretaker(false);
       }
     }
@@ -455,7 +459,7 @@ function CareTeam() {
           ) : (
             <div className="py-4 mb-6" role="status">
               <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
-                No active caretakers. Please restore a caretaker below or add a new one.
+                No caregivers have been added yet.
               </p>
             </div>
           )}
@@ -503,51 +507,39 @@ function CareTeam() {
           <h2 id="add-caretaker-heading" className="text-xl font-normal mb-4" style={{ color: 'var(--text-primary)' }}>
             Add Care Team Member
           </h2>
-          <form 
-            className="flex gap-2" 
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleAddCaretaker();
+          <button
+            type="button"
+            onClick={() => setShowAddCaretakerModal(true)}
+            className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80 inline-flex items-center gap-2"
+            style={{ 
+              color: 'var(--button-secondary-text)',
+              backgroundColor: 'var(--button-secondary-bg)',
+              '--tw-ring-color': 'var(--focus-ring)',
+            } as React.CSSProperties}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
             }}
-            aria-label="Add a new caretaker"
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
+            }}
+            aria-label="Add caretaker"
           >
-            <input
-              type="text"
-              value={newCaretakerName}
-              onChange={(e) => setNewCaretakerName(e.target.value)}
-              placeholder="Enter name…"
-              className="flex-1 px-4 py-3 text-base rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent"
-              style={{ 
-                color: 'var(--text-primary)',
-                backgroundColor: 'var(--bg-primary)',
-                borderColor: 'var(--border-color)',
-                '--tw-ring-color': 'var(--focus-ring)',
-              } as React.CSSProperties}
-              aria-label="Caretaker name"
-            />
-            <button
-              type="submit"
-              className="px-6 py-3 text-base font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer hover:opacity-80"
-              style={{ 
-                color: 'var(--button-secondary-text)',
-                backgroundColor: 'var(--button-secondary-bg)',
-                '--tw-ring-color': 'var(--focus-ring)',
-              } as React.CSSProperties}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg-hover)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--button-secondary-bg)';
-              }}
-              aria-label="Add caretaker"
-            >
-              Add
-            </button>
-          </form>
+            <FontAwesomeIcon icon={Icons.caregiver} style={{ fontSize: '0.85em' }} aria-hidden="true" />
+            Add Care Team Member
+          </button>
         </section>
           </>
         )}
       </div>
+      <AddCaretakerModal
+        isOpen={showAddCaretakerModal}
+        onClose={() => {
+          setShowAddCaretakerModal(false);
+          setIsAddingCaretaker(false);
+        }}
+        onSubmit={handleAddCaretaker}
+        isSubmitting={isAddingCaretaker}
+      />
     </main>
   );
 }

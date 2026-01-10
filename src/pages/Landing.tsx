@@ -5,39 +5,57 @@ import type { NotebookIndex } from '../domain/notebook';
 import { createFirebaseAdapter } from '../storage';
 
 interface LandingProps {
-  onStartNotebook: () => void
   onSwitchNotebook: (notebookId: string) => void
-  onCreateAnotherNotebook: () => void
   notebookIndex: NotebookIndex
+  optimisticCareeNames?: Record<string, string>
+  onStartNotebookClick: () => void
+  onCreateAnotherNotebookClick: () => void
 }
 
-function Landing({ onStartNotebook, onSwitchNotebook, onCreateAnotherNotebook, notebookIndex }: LandingProps) {
+function Landing({ onSwitchNotebook, notebookIndex, optimisticCareeNames = {}, onStartNotebookClick, onCreateAnotherNotebookClick }: LandingProps) {
   const hasNotebooks = notebookIndex.length > 0;
   const [careeNames, setCareeNames] = useState<Record<string, string>>({});
 
   // Load caree names for all notebooks
   useEffect(() => {
+    if (!hasNotebooks) return;
+
+    let cancelled = false;
+
     const loadCareeNames = async () => {
-      const names: Record<string, string> = {};
+      setCareeNames((prev) => ({ ...prev })); // preserve existing names
+
       await Promise.all(
         notebookIndex.map(async (entry) => {
+          // Skip if already known (optimistic OR previously loaded)
+          if (optimisticCareeNames[entry.id] || careeNames[entry.id]) {
+            return;
+          }
+
           try {
             const adapter = createFirebaseAdapter(entry.id);
             const metadata = await adapter.getNotebookMetadata();
-            names[entry.id] = metadata.careeName;
-          } catch (error) {
-            // Silently handle errors - use fallback
-            names[entry.id] = 'Care recipient';
+
+            if (!cancelled && metadata?.careeName) {
+              setCareeNames((prev) => ({
+                ...prev,
+                [entry.id]: metadata.careeName,
+              }));
+            }
+          } catch {
+            // Firestore throttled or legacy notebook
+            // DO NOTHING — preserve existing name
           }
         })
       );
-      setCareeNames(names);
     };
 
-    if (hasNotebooks) {
-      loadCareeNames();
-    }
-  }, [notebookIndex, hasNotebooks]);
+    loadCareeNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notebookIndex, hasNotebooks, optimisticCareeNames]);
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -58,7 +76,8 @@ function Landing({ onStartNotebook, onSwitchNotebook, onCreateAnotherNotebook, n
               </h2>
               <ul className="space-y-3 mb-6" role="list">
                 {notebookIndex.map((entry) => {
-                  const careeName = careeNames[entry.id] || 'Care recipient';
+                  // Prioritize optimistic value, then loaded value, then fallback
+                  const careeName = optimisticCareeNames[entry.id] || careeNames[entry.id] || 'Care recipient';
                   const displayName = `${careeName}'s notebook`;
                   return (
                     <li key={entry.id}>
@@ -99,7 +118,7 @@ function Landing({ onStartNotebook, onSwitchNotebook, onCreateAnotherNotebook, n
             </div>
             <button 
               type="button"
-              onClick={onCreateAnotherNotebook}
+              onClick={onCreateAnotherNotebookClick}
               className="px-6 py-3 rounded-md text-base font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer hover:opacity-80"
               style={{ 
                 backgroundColor: 'var(--button-bg)',
@@ -144,7 +163,7 @@ function Landing({ onStartNotebook, onSwitchNotebook, onCreateAnotherNotebook, n
 
             <button 
               type="button"
-              onClick={onStartNotebook}
+              onClick={onStartNotebookClick}
               className="px-6 py-3 rounded-md text-base font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer hover:opacity-80"
               style={{ 
                 backgroundColor: 'var(--button-bg)',

@@ -5,8 +5,8 @@ import CareeNameModal from './components/CareeNameModal';
 import { Spinner } from './components/Spinner';
 import { createDataAdapter, createFirebaseAdapter } from './storage';
 import { DataAdapterContext } from './storage/DataAdapterContext';
-import { resolveNotebookId, createNewNotebook, switchToNotebook, updateUrlWithNotebookId } from './utils/notebookId';
-import { readNotebookIndex } from './domain/notebook';
+import { resolveNotebookId, generateNotebookId, switchToNotebook, updateUrlWithNotebookId } from './utils/notebookId';
+import { readNotebookIndex, addNotebookToIndex, setLastNotebookId } from './domain/notebook';
 
 // Lazy load page components for code splitting
 const Landing = lazy(() => import('./pages/Landing'));
@@ -34,6 +34,8 @@ function App() {
 
   const [notebookIndex, setNotebookIndex] = useState(() => readNotebookIndex());
   const [showCareeNameModal, setShowCareeNameModal] = useState(false);
+  const [isCreatingAnotherNotebook, setIsCreatingAnotherNotebook] = useState(false);
+  const [optimisticCareeNames, setOptimisticCareeNames] = useState<Record<string, string>>({});
 
   // Create adapter for current notebook ID
   const dataAdapter = useMemo(() => {
@@ -74,23 +76,81 @@ function App() {
     setNotebookIndex(readNotebookIndex());
   }, [currentNotebookId]);
 
-  const handleStartNotebook = () => {
+  /**
+   * Create a notebook with metadata.
+   * Resilient to quota failure - app works even if Firestore is unavailable.
+   * @param careeName The name of the care recipient
+   * @returns The new notebook ID
+   */
+  const createNotebookWithCaree = async (careeName: string): Promise<string> => {
+    const notebookId = generateNotebookId();
+
+    addNotebookToIndex(notebookId, careeName);
+
+    // Seed optimistic + persistent local cache FIRST
+    setOptimisticCareeNames((prev) => ({
+      ...prev,
+      [notebookId]: careeName,
+    }));
+
+    setLastNotebookId(notebookId);
+    updateUrlWithNotebookId(notebookId);
+
+    const adapter = createFirebaseAdapter(notebookId);
+
+    try {
+      await adapter.setNotebookMetadata({
+        careeName,
+        createdAt: Date.now(),
+      });
+    } catch (err: any) {
+      if (err?.code === 'resource-exhausted') {
+        // Graceful degradation: allow app to function offline
+        console.warn('Notebook created locally due to Firestore quota limits');
+      } else {
+        throw err;
+      }
+    }
+
+    return notebookId;
+  };
+
+  const handleStartNotebookClick = () => {
     // Show modal to prompt for caree name
+    setIsCreatingAnotherNotebook(false);
     setShowCareeNameModal(true);
   }
 
-  const handleCareeNameSubmit = async (careeName: string) => {
-    // Create a new notebook
-    const newNotebookId = createNewNotebook();
+  const handleStartNotebook = async (careeName: string): Promise<string> => {
+    const notebookId = await createNotebookWithCaree(careeName);
     
-    // Create notebook metadata in Firestore with careeName
-    const adapter = createFirebaseAdapter(newNotebookId);
-    await adapter.createNotebook(careeName);
+    // Update notebook index
+    const updatedIndex = readNotebookIndex();
+    setNotebookIndex(updatedIndex);
     
-    setCurrentNotebookId(newNotebookId);
-    setNotebookIndex(readNotebookIndex());
-    setShowCareeNameModal(false);
+    // Creating first notebook - navigate to Today page
+    setCurrentNotebookId(notebookId);
     setCurrentView('today');
+    
+    return notebookId;
+  }
+
+  const handleCreateAnotherNotebookClick = () => {
+    setIsCreatingAnotherNotebook(true);
+    setShowCareeNameModal(true);
+  }
+
+  const handleCreateAnotherNotebook = async (careeName: string): Promise<string> => {
+    const notebookId = await createNotebookWithCaree(careeName);
+    
+    // Update notebook index
+    const updatedIndex = readNotebookIndex();
+    setNotebookIndex(updatedIndex);
+    
+    // Creating another notebook - stay on Landing page
+    // Optimistic update already done in createNotebookWithCaree
+    
+    return notebookId;
   }
 
   const handleSwitchNotebook = (notebookId: string) => {
@@ -98,10 +158,6 @@ function App() {
     setCurrentNotebookId(notebookId);
     setNotebookIndex(readNotebookIndex());
     setCurrentView('today');
-  }
-
-  const handleCreateAnotherNotebook = () => {
-    handleStartNotebook();
   }
 
   const handleNavigateHome = () => {
@@ -155,10 +211,11 @@ function App() {
             <Privacy />
           ) : (
             <Landing 
-              onStartNotebook={handleStartNotebook}
               onSwitchNotebook={handleSwitchNotebook}
-              onCreateAnotherNotebook={handleCreateAnotherNotebook}
               notebookIndex={notebookIndex}
+              optimisticCareeNames={optimisticCareeNames}
+              onStartNotebookClick={handleStartNotebookClick}
+              onCreateAnotherNotebookClick={handleCreateAnotherNotebookClick}
             />
           )}
         </Suspense>
@@ -172,8 +229,24 @@ function App() {
       </AppShell>
       <CareeNameModal
         isOpen={showCareeNameModal}
-        onClose={() => setShowCareeNameModal(false)}
-        onSubmit={handleCareeNameSubmit}
+        onClose={() => {
+          setShowCareeNameModal(false);
+          setIsCreatingAnotherNotebook(false);
+        }}
+        onSubmit={async (careeName: string) => {
+          try {
+            if (isCreatingAnotherNotebook) {
+              await handleCreateAnotherNotebook(careeName);
+            } else {
+              await handleStartNotebook(careeName);
+            }
+            setShowCareeNameModal(false);
+            setIsCreatingAnotherNotebook(false);
+          } catch (error) {
+            // Re-throw error so modal can handle it
+            throw error;
+          }
+        }}
       />
     </DataAdapterContext.Provider>
   );

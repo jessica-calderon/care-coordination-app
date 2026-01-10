@@ -20,3 +20,4 @@ export function useDataAdapter(): DataAdapter {
   return adapter;
 }
 
+
