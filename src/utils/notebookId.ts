@@ -38,6 +38,19 @@ export function updateUrlWithNotebookId(notebookId: string): void {
 }
 
 /**
+ * Remove the notebook ID parameter from the URL without page reload.
+ */
+export function removeNotebookIdFromUrl(): void {
+  if (typeof window === 'undefined') return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('notebook');
+  
+  // Use replaceState to update URL without reloading or adding to history
+  window.history.replaceState({}, '', url.toString());
+}
+
+/**
  * Resolve notebook ID from URL parameter, last-used notebook, or return null.
  * Priority:
  * 1. URL parameter ?notebook=<id>

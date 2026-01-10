@@ -5,7 +5,7 @@ import CareeNameModal from './components/CareeNameModal';
 import { Spinner } from './components/Spinner';
 import { createDataAdapter, createFirebaseAdapter } from './storage';
 import { DataAdapterContext } from './storage/DataAdapterContext';
-import { resolveNotebookId, generateNotebookId, switchToNotebook, updateUrlWithNotebookId } from './utils/notebookId';
+import { resolveNotebookId, generateNotebookId, switchToNotebook, updateUrlWithNotebookId, removeNotebookIdFromUrl } from './utils/notebookId';
 import { readNotebookIndex, addNotebookToIndex, setLastNotebookId } from './domain/notebook';
 
 // Lazy load page components for code splitting
@@ -64,8 +64,11 @@ function App() {
   useEffect(() => {
     if (currentNotebookId) {
       updateUrlWithNotebookId(currentNotebookId);
+    } else if (currentView === 'home') {
+      // Remove notebook ID from URL when on landing page
+      removeNotebookIdFromUrl();
     }
-  }, [currentNotebookId]);
+  }, [currentNotebookId, currentView]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_VIEW, currentView);
@@ -161,7 +164,10 @@ function App() {
   }
 
   const handleNavigateHome = () => {
-    setCurrentView('home')
+    setCurrentView('home');
+    // Clear notebook ID state and URL when navigating to landing page
+    setCurrentNotebookId(null);
+    removeNotebookIdFromUrl();
   }
 
   const handleNavigateCareTeam = () => {
