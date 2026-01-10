@@ -1239,9 +1239,26 @@ function Today() {
             </div>
           ) : (
             <div className="space-y-3 text-base" style={{ color: 'var(--text-secondary)' }}>
-              <p>
-                Last updated by: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Last updated by ${lastUpdatedBy || 'nobody yet'}`}>{lastUpdatedBy || 'nobody yet'}</span>
-              </p>
+              {(() => {
+                // Detect empty handoff state
+                const hasHandoff = Boolean(lastUpdatedBy && lastUpdatedBy !== 'nobody yet' && lastUpdatedBy !== '');
+                
+                if (!hasHandoff) {
+                  // Empty handoff state - show neutral message
+                  return (
+                    <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                      No handoff has occurred yet.
+                    </p>
+                  );
+                } else {
+                  // Handoff exists - show last updated by
+                  return (
+                    <p>
+                      Last updated by: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Last updated by ${lastUpdatedBy}`}>{lastUpdatedBy}</span>
+                    </p>
+                  );
+                }
+              })()}
               <p>
                 Current caregiver: <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-label={`Current caregiver is ${currentCaregiver || 'not set'}`}>{currentCaregiver || 'not set'}</span>
               </p>
